@@ -18,7 +18,7 @@ def extract_text_from_pdf(pdf_file):
 
 def extract_fields_from_text(text):
     prompt = f"""
-Extract the following details from this insurance document:
+Extract the following details from this insurance document, making your best inference based on context:
 
 - Insured Name
 - Named Insured Type (e.g. LLC, Trust, Individual)
@@ -35,8 +35,14 @@ Extract the following details from this insurance document:
 - Carrier Name
 - Broker Name
 - Underwriting Contact Email
+- Wind Deductible
+- Hail Deductible
+- Named Storm Deductible
+- All Other Perils Deductible
 
-Please return them in this format exactly:
+If a deductible is not clearly labeled, infer the most likely match based on the terms and context. If truly unavailable, return "N/A".
+
+Return the results in this format exactly:
 
 Insured Name: ...
 Named Insured Type: ...
@@ -53,6 +59,10 @@ Coverage Type: ...
 Carrier Name: ...
 Broker Name: ...
 Underwriting Contact Email: ...
+Wind Deductible: ...
+Hail Deductible: ...
+Named Storm Deductible: ...
+All Other Perils Deductible: ...
 
 --- DOCUMENT START ---
 {text[:6000]}
@@ -81,7 +91,11 @@ def parse_output_to_dict(text_output):
         "Coverage Type",
         "Carrier Name",
         "Broker Name",
-        "Underwriting Contact Email"
+        "Underwriting Contact Email",
+        "Wind Deductible",
+        "Hail Deductible",
+        "Named Storm Deductible",
+        "All Other Perils Deductible"
     ]
 
     data = {field: "N/A" for field in expected_fields}
