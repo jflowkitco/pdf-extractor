@@ -6,8 +6,8 @@ import os
 from dotenv import load_dotenv
 
 # Load .env and set API key
-load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+from openai import OpenAI
+client = OpenAI()
 
 def extract_text_from_pdf(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
@@ -43,12 +43,13 @@ def extract_fields_from_text(text):
     --- DOCUMENT END ---
     """
 
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0
-    )
-    return response['choices'][0]['message']['content']
+    response = client.chat.completions.create(
+    model="gpt-3.5-turbo",
+    messages=[{"role": "user", "content": prompt}],
+    temperature=0
+)
+    return response.choices[0].message.content
+
 
 def parse_output_to_dict(text_output):
     data = {}
