@@ -128,6 +128,14 @@ def generate_pdf_summary(data, summary_path):
     def safe_text(text):
         return text.encode("latin-1", "replace").decode("latin-1")
 
+    section_headers = {
+        "Policy Info": ["Insured Name", "Named Insured Type", "Mailing Address", "Property Address"],
+        "Coverage Dates & Values": ["Effective Date", "Expiration Date", "Premium", "Taxes", "Fees", "Total Insured Value"],
+        "Policy Details": ["Policy Number", "Coverage Type", "Carrier Name", "Broker Name", "Underwriting Contact Email"],
+        "Deductibles": ["Wind Deductible", "Hail Deductible", "Named Storm Deductible", "All Other Perils Deductible", "Deductible Notes"],
+        "Endorsements & Exclusions": ["Endorsements Summary", "Exclusions Summary"]
+    }
+
     pdf = FPDF()
     pdf.add_page()
 
@@ -138,18 +146,26 @@ def generate_pdf_summary(data, summary_path):
     pdf.set_font("Times", "B", 16)
     pdf.set_text_color(*KITCO_BLUE)
     pdf.cell(200, 10, txt=safe_text("Insurance Document Summary"), ln=True, align="C")
-    pdf.ln(10)
+    pdf.ln(8)
 
-    pdf.set_font("Times", size=12)
-    pdf.set_text_color(0, 0, 0)
-    for key, value in data.items():
-        pdf.set_font("Times", "B", 12)
-        pdf.set_text_color(*KITCO_GREEN)
-        pdf.multi_cell(0, 8, txt=safe_text(f"{key}"), align="L")
-        pdf.set_font("Times", size=12)
-        pdf.set_text_color(0, 0, 0)
-        pdf.multi_cell(0, 8, txt=safe_text(value), align="L")
-        pdf.ln(1)
+    for section, keys in section_headers.items():
+        pdf.set_font("Times", "B", 14)
+        pdf.set_text_color(*KITCO_GOLD)
+        pdf.cell(0, 10, txt=safe_text(section), ln=True)
+        pdf.set_draw_color(180, 180, 180)
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+        pdf.ln(4)
+
+        for key in keys:
+            value = data.get(key, "N/A")
+            pdf.set_font("Times", "B", 12)
+            pdf.set_text_color(*KITCO_GREEN)
+            pdf.multi_cell(0, 8, txt=safe_text(f"{key}"), align="L")
+            pdf.set_font("Times", size=12)
+            pdf.set_text_color(0, 0, 0)
+            pdf.multi_cell(0, 8, txt=safe_text(value), align="L")
+            pdf.ln(1)
+        pdf.ln(2)
 
     pdf.output(summary_path)
 
