@@ -4,7 +4,6 @@ import pandas as pd
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
-import re
 
 # Load API key from .env
 load_dotenv()
@@ -14,49 +13,45 @@ def extract_text_from_pdf(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
         text = ""
         for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
+            text += page.extract_text() + "\n"
     return text
 
 def extract_fields_from_text(text):
     prompt = f"""
-You are an insurance policy analysis bot.
+You are an insurance document analysis assistant.
 
-Your job is to extract and infer the following fields from the insurance document below. Use context and examples to identify data even when labels are inconsistent or scattered across the document.
+Your task is to extract and infer the following details from the insurance quote or binder text below. Use common insurance document patterns and context clues to identify data points even when labels are inconsistent or formatted differently.
 
-**Fields to extract:**
+### Fields to extract:
 - Insured Name
 - Named Insured Type (e.g. LLC, Trust, Individual)
 - Mailing Address
 - Property Address
 - Effective Date
 - Expiration Date
-- Premium (Look in premium summaries and tax summaries)
-- Taxes (Look for terms like "surplus lines tax", "tax summary", or "fee taxable")
-- Fees (Look for "service fee", "inspection fee", etc.)
+- Premium (even if written as "Premium: $X,XXX (plus applicable taxes)")
+- Taxes
+- Fees
 - Total Insured Value
-- Policy Number (Look near carrier name or underlined headings)
-- Coverage Type (e.g. Special, Basic, Fire Only)
+- Policy Number (look for variations like "Policy#", "Policy No.", etc.)
+- Coverage Type (e.g. Property, Liability, Umbrella)
 - Carrier Name
 - Broker Name
 - Underwriting Contact Email
 
-**Deductibles to infer (even if not explicitly labeled):**
+### Deductibles to infer (even if not explicitly labeled):
 - Wind Deductible
 - Hail Deductible
 - Named Storm Deductible
 - All Other Perils Deductible
-- Deductible Notes (brief summary of any deductible-related language or assumptions)
+- Deductible Notes (brief explanation of how deductibles apply)
 
-**Endorsement & Exclusion Summary:**
-Separate into two fields:
-- Endorsements Summary
-- Exclusions Summary
+### Additional Summaries:
+- Endorsements Summary (list or describe endorsements)
+- Exclusions Summary (list or describe exclusions)
 
-If any fields are not present, return "N/A".
+If a field is not found, return "N/A". Format your answer exactly like this:
 
-Return the data in this exact format with readable wrapping and line breaks for summaries:
 Insured Name: ...
 Named Insured Type: ...
 Mailing Address: ...
