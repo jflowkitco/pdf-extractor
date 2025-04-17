@@ -46,26 +46,21 @@ Your job is to extract and infer the following fields from the insurance documen
 - Hail Deductible
 - Named Storm Deductible
 - All Other Perils Deductible
+- Deductible Notes (brief summary of any deductible-related language or assumptions)
 
-Also include a plain-language summary of any deductible info found in the document. Mention:
-- If deductibles were listed clearly
-- What kind of language was used
-- If anything was assumed or unclear
+**Also provide a short summary of endorsements and exclusions:**
 
-Return that summary in a field labeled:  
-**Deductible Notes**
+Look for section titles or phrases like:
+- “Forms and Endorsements”
+- “This policy excludes…”
+- “The following is added to…”
 
-Use these example patterns to recognize deductible types:
+Summarize clearly in:
+- Endorsements and Exclusions Summary: ...
 
-- “Wind/hail deductible: 2% subject to $50,000 min”
-- “Named storm deductible: 5%”
-- “All other perils: $100,000”
-- “Deductible: $25,000” → assume AOP unless otherwise stated
+If any fields are not present, return "N/A".
 
-If only one deductible is listed, assign it to “All Other Perils.”
-If truly unavailable, return "N/A".
-
-Return the results exactly like this:
+**Return the data in this exact format:**
 
 Insured Name: ...
 Named Insured Type: ...
@@ -87,6 +82,7 @@ Hail Deductible: ...
 Named Storm Deductible: ...
 All Other Perils Deductible: ...
 Deductible Notes: ...
+Endorsements and Exclusions Summary: ...
 
 --- DOCUMENT START ---
 {text[:6000]}
@@ -120,7 +116,8 @@ def parse_output_to_dict(text_output):
         "Hail Deductible",
         "Named Storm Deductible",
         "All Other Perils Deductible",
-        "Deductible Notes"
+        "Deductible Notes",
+        "Endorsements and Exclusions Summary"
     ]
 
     data = {field: "N/A" for field in expected_fields}
