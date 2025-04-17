@@ -6,9 +6,9 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from fpdf import FPDF
 import tempfile
-from PyPDF2 import PdfMerger, PdfReader
+from PyPDF2 import PdfMerger
 
-# Load API key
+# Load API key from .env
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -16,24 +16,24 @@ KITCO_BLUE = (33, 135, 132)
 KITCO_GREEN = (61, 153, 93)
 KITCO_GOLD = (191, 127, 43)
 
-KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"
+KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"  # Ensure this is uploaded with your app
 
 
-def extract_text_from_pdf(pdf_file):
+def extract_text_by_page(pdf_file):
+    page_texts = []
     with pdfplumber.open(pdf_file) as pdf:
-        text = ""
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
-        return text
+        for i, page in enumerate(pdf.pages):
+            text = page.extract_text()
+            if text:
+                page_texts.append((i + 1, text))
+    return page_texts
 
 
 def extract_fields_from_text(text):
     prompt = f"""
 You are an insurance policy analysis bot.
 
-Your job is to extract and infer the following fields from the insurance document below. Use context and examples to identify data even when labels are inconsistent.
+Your job is to extract and infer the following fields from the insurance document below. Use context and examples to identify data even when labels are inconsistent. Look for information in sections like premium breakdowns, declarations, or coverage summaries.
 
 **Fields to extract:**
 - Insured Name
@@ -42,34 +42,52 @@ Your job is to extract and infer the following fields from the insurance documen
 - Property Address
 - Effective Date
 - Expiration Date
-- Premium
+- Premium (total or combined if multiple lines)
 - Taxes
 - Fees
 - Total Insured Value
-- Policy Number
+- Policy Number (look near the top, in declaration or coverage summary pages)
 - Coverage Type (e.g. Property, Liability, Umbrella)
 - Carrier Name
 - Broker Name
 - Underwriting Contact Email
 
-**Deductibles to infer:**
+**Deductibles to infer (even if not explicitly labeled):**
 - Wind Deductible
 - Hail Deductible
 - Named Storm Deductible
 - All Other Perils Deductible
-- Deductible Notes
+- Deductible Notes (brief summary of any deductible-related language or assumptions)
 
 **Endorsement & Exclusion Summary:**
+Separate into two fields:
 - Endorsements Summary
 - Exclusions Summary
 
-If any fields are not present, return "N/A".
+If any fields are not present, return "N/A". For the summaries, return "N/A" if no content is found.
 
-Return format:
+Return the data in this exact format:
 Insured Name: ...
 Named Insured Type: ...
 Mailing Address: ...
-...
+Property Address: ...
+Effective Date: ...
+Expiration Date: ...
+Premium: ...
+Taxes: ...
+Fees: ...
+Total Insured Value: ...
+Policy Number: ...
+Coverage Type: ...
+Carrier Name: ...
+Broker Name: ...
+Underwriting Contact Email: ...
+Wind Deductible: ...
+Hail Deductible: ...
+Named Storm Deductible: ...
+All Other Perils Deductible: ...
+Deductible Notes: ...
+Endorsements Summary: ...
 Exclusions Summary: ...
 
 --- DOCUMENT START ---
@@ -141,17 +159,11 @@ def generate_pdf_summary(data, summary_path):
 
 
 def merge_pdfs(summary_path, original_path, output_path):
-    try:
-        PdfReader(original_path)  # Validate file
-        merger = PdfMerger()
-        merger.append(summary_path)
-        merger.append(original_path)
-        merger.write(output_path)
-        merger.close()
-    except Exception as e:
-        print(f"Error merging PDFs: {e}")
-        # Fall back to summary only
-        os.rename(summary_path, output_path)
+    merger = PdfMerger()
+    merger.append(summary_path)
+    merger.append(original_path)
+    merger.write(output_path)
+    merger.close()
 
 
 # Streamlit UI
@@ -162,10 +174,11 @@ uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
 
 if uploaded_file is not None:
     st.info("Extracting text from PDF...")
-    text = extract_text_from_pdf(uploaded_file)
+    pages = extract_text_by_page(uploaded_file)
+    full_text = "\n".join(p[1] for p in pages)
 
     st.success("Sending to GPT...")
-    fields_output = extract_fields_from_text(text)
+    fields_output = extract_fields_from_text(full_text)
     data_dict = parse_output_to_dict(fields_output)
 
     st.subheader("📝 Extracted Details")
