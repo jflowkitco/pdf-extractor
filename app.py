@@ -123,6 +123,11 @@ def parse_output_to_dict(text_output):
         elif current_field:
             data[current_field] += " " + line.strip()
 
+    # Format Endorsements Summary as bullet list
+    if data["Endorsements Summary"] != "N/A":
+        bullets = data["Endorsements Summary"].split(" - ")
+        data["Endorsements Summary"] = "\n".join(f"• {b.strip()}" for b in bullets if b.strip())
+
     # Add rate calculation if Premium and Total Insured Value are present
     try:
         premium = float(data["Premium"].replace("$", "").replace(",", ""))
