@@ -3,14 +3,14 @@ import pdfplumber
 import pandas as pd
 import os
 from dotenv import load_dotenv
-import openai
+from openai import OpenAI
 from fpdf import FPDF
 import tempfile
 from PyPDF2 import PdfMerger, PdfReader
 
 # Load API key from .env
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 KITCO_BLUE = (33, 135, 132)
 KITCO_GREEN = (61, 153, 93)
@@ -84,7 +84,7 @@ Exclusions Summary: ...
 --- DOCUMENT END ---
 """
 
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
         temperature=0
@@ -104,7 +104,7 @@ def parse_output_to_dict(text_output):
         tiv = float(data.get("Total Insured Value", "0").replace("$", "").replace(",", ""))
         if tiv > 0:
             rate = round((premium / tiv) * 100, 3)
-            data["Rate"] = f"${rate}"
+            data["Rate"] = f"${rate:.3f}"
         else:
             data["Rate"] = "N/A"
     except:
@@ -127,14 +127,13 @@ class SummaryPDF(FPDF):
         self.set_text_color(*KITCO_GREEN)
         self.set_font("Helvetica", "B", 12)
         self.cell(0, 10, title, ln=True)
-        self.set_text_color(0, 0, 0)
         self.set_font("Palatino", size=11)
         for field in fields:
             value = data.get(field, "N/A")
             self.set_text_color(*KITCO_BLUE)
-            self.cell(60, 6, f"{field}:", ln=False)
+            self.cell(0, 6, f"{field}:", ln=False)
             self.set_text_color(0, 0, 0)
-            self.multi_cell(0, 6, f" {value}", align="L")
+            self.cell(0, 6, f" {value}", ln=True)
 
     def add_bullet_section(self, title, content):
         self.set_text_color(*KITCO_GREEN)
@@ -149,7 +148,6 @@ class SummaryPDF(FPDF):
                     self.multi_cell(0, 5, f"• {bullet.strip()}", align="L")
 
 # Generate PDF summary
-
 def generate_pdf_summary(data, filename):
     pdf = SummaryPDF()
     pdf.add_page()
@@ -172,7 +170,6 @@ def generate_pdf_summary(data, filename):
     pdf.output(filename)
 
 # Merge summary and uploaded PDF
-
 def merge_pdfs(summary_path, original_path, output_path):
     merger = PdfMerger()
     merger.append(summary_path)
