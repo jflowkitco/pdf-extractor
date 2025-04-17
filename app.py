@@ -3,7 +3,7 @@ import pdfplumber
 import pandas as pd
 import os
 from dotenv import load_dotenv
-from openai import OpenAI
+import openai
 from fpdf import FPDF
 import tempfile
 from PyPDF2 import PdfMerger
@@ -11,49 +11,55 @@ import re
 
 # Load API key
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 KITCO_BLUE = (33, 135, 132)
 KITCO_GREEN = (61, 153, 93)
 KITCO_GOLD = (191, 127, 43)
 KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"
 
-# Extract text from all pages
 def extract_text_from_pdf(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
         return "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
 
-# OpenAI data extraction prompt
 def extract_fields_from_text(text):
     prompt = f"""
-You are a commercial insurance expert reviewing a property insurance quote.
-Carefully extract the following fields. Return "N/A" if unclear. Look in invoice tables or summary lines for:
-- Premium (e.g. "Premium Due", "Total Premium", "Annual Premium")
-- Taxes (e.g. "Surplus Lines Tax", "Taxes and Fees")
-- Fees (e.g. "Policy Fee", "Stamping Fee", etc.)
-- Policy Number (can appear anywhere, often near Named Insured or at top)
+You are a commercial insurance analyst reviewing a quote packet.
 
-Return each value on its own line:
+Please extract the following fields using your best judgment. Look for invoice-style tables, subtotals, or summary lines:
+- Premium (may appear as "Total Premium", "Annual Premium", "Premium Due")
+- Taxes (look for "Surplus Lines Tax", "State Tax", or combined lines)
+- Fees (includes Policy Fee, Stamping Fee, etc.)
+- Policy Number (anywhere in document)
+
+Also find:
+- Insured Name
+- Named Insured Type
+- Mailing Address
+- Property Address
+- Effective Date
+- Expiration Date
+- Total Insured Value
+- Coverage Type (Property, Liability, Umbrella, etc.)
+- Carrier Name
+- Broker Name
+- Underwriting Contact Email
+
+And deductibles (may appear in charts, footnotes, or endorsement sections):
+- Wind Deductible
+- Hail Deductible
+- Named Storm Deductible
+- All Other Perils Deductible
+- Deductible Notes (brief summary)
+
+Also provide:
+- Endorsements Summary: a bullet list of all endorsements listed by name or form number.
+- Exclusions Summary: a bullet list of all exclusions mentioned or referenced.
+
+Return each value clearly in this format:
 Insured Name: ...
 Named Insured Type: ...
-Mailing Address: ...
-Property Address: ...
-Effective Date: ...
-Expiration Date: ...
-Premium: ...
-Taxes: ...
-Fees: ...
-Total Insured Value: ...
-Policy Number: ...
-Coverage Type: ...
-Carrier Name: ...
-Broker Name: ...
-Underwriting Contact Email: ...
-Wind Deductible: ...
-Hail Deductible: ...
-Named Storm Deductible: ...
-All Other Perils Deductible: ...
-Deductible Notes: ...
+...
 Endorsements Summary:
 - ...
 Exclusions Summary:
@@ -63,14 +69,13 @@ Exclusions Summary:
 {text[:7000]}
 --- DOCUMENT END ---
 """
-    response = client.chat.completions.create(
+    response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
         temperature=0
     )
     return response.choices[0].message.content
 
-# Parse and post-process GPT response
 def parse_output_to_dict(text_output):
     data = {}
     for line in text_output.strip().split("\n"):
@@ -87,7 +92,6 @@ def parse_output_to_dict(text_output):
 
     return data
 
-# Create PDF summary
 class SummaryPDF(FPDF):
     def header(self):
         if os.path.exists(KITCO_LOGO_PATH):
@@ -116,13 +120,11 @@ class SummaryPDF(FPDF):
         self.cell(0, 10, title, ln=True)
         self.set_text_color(0, 0, 0)
         self.set_font("Helvetica", size=8)
-        for line in content.split("\n"):
-            for bullet in line.split(" - "):
-                if bullet.strip():
-                    self.cell(5)
-                    self.multi_cell(0, 5, f"• {bullet.strip()}", align="L")
+        for line in content.strip().split("\n"):
+            if line.startswith("-"):
+                self.cell(5)
+                self.multi_cell(0, 5, f"• {line[1:].strip()}", align="L")
 
-# Generate and save PDF
 def generate_pdf_summary(data, filename):
     pdf = SummaryPDF()
     pdf.add_page()
@@ -144,7 +146,6 @@ def generate_pdf_summary(data, filename):
     pdf.add_bullet_section("Exclusions Summary", data.get("Exclusions Summary", "N/A"))
     pdf.output(filename, "F")
 
-# Merge summary and uploaded file
 def merge_pdfs(summary_path, original_path, output_path):
     merger = PdfMerger()
     merger.append(summary_path)
