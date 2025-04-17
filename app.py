@@ -29,9 +29,11 @@ def extract_text_from_pdf(pdf_file):
 # Function to call OpenAI and extract data
 def extract_fields_from_text(text):
     prompt = f"""
-You are a commercial insurance expert reviewing a property insurance quote. Carefully extract the following data points from the text below. If a value is not clearly stated, return "N/A". If the value is embedded in a sentence, still return it. Include content in parentheses (e.g., "plus applicable premium tax").
+You are reviewing a property insurance quote and need to extract key data points for a summary report.
 
-Extract and return the following fields:
+Extract the following fields. Look across the entire document — including tables and narrative paragraphs. Capture numeric values and any explanatory phrases like "(plus applicable premium tax)". If a value is not found, write "N/A".
+
+Fields:
 - Insured Name
 - Named Insured Type
 - Mailing Address
@@ -55,12 +57,8 @@ Extract and return the following fields:
 - Endorsements Summary (bullet list format)
 - Exclusions Summary (bullet list format)
 
-📌 Notes for accurate extraction:
-- Premium, Taxes, and Fees may be on a different page. Return the number even if it says “plus applicable premium tax.”
-- Policy Number may appear in a section with named insured or coverage details.
-- Values may appear in a summary table, sentence, or paragraph.
+Return values in this format:
 
-Use this format exactly (each on its own line):
 Insured Name: ...
 Named Insured Type: ...
 Mailing Address: ...
@@ -95,7 +93,7 @@ Exclusions Summary: ...
     )
     return response.choices[0].message.content
 
-# Function to parse GPT response to dictionary and calculate rate
+# Parse and calculate rate
 def parse_output_to_dict(text_output):
     data = {}
     for line in text_output.strip().split("\n"):
@@ -116,7 +114,7 @@ def parse_output_to_dict(text_output):
 
     return data
 
-# Function to create PDF summary
+# PDF Summary Class
 class SummaryPDF(FPDF):
     def header(self):
         if os.path.exists(KITCO_LOGO_PATH):
@@ -151,13 +149,12 @@ class SummaryPDF(FPDF):
                     self.cell(5)
                     self.multi_cell(0, 5, f"• {bullet.strip()}", align="L")
 
-# Generate PDF summary
+# Generate PDF Summary
 def generate_pdf_summary(data, filename):
     pdf = SummaryPDF()
     pdf.add_page()
     pdf.add_data_section("Insured Details", [
-        "Insured Name", "Named Insured Type", "Mailing Address", "Property Address",
-        "Underwriting Contact Email"
+        "Insured Name", "Named Insured Type", "Mailing Address", "Property Address", "Underwriting Contact Email"
     ], data)
     pdf.add_data_section("Coverage Dates and Values", [
         "Effective Date", "Expiration Date", "Premium", "Taxes", "Fees", "Total Insured Value", "Rate"
@@ -166,14 +163,13 @@ def generate_pdf_summary(data, filename):
         "Policy Number", "Coverage Type", "Carrier Name", "Broker Name"
     ], data)
     pdf.add_data_section("Deductibles", [
-        "Wind Deductible", "Hail Deductible", "Named Storm Deductible",
-        "All Other Perils Deductible", "Deductible Notes"
+        "Wind Deductible", "Hail Deductible", "Named Storm Deductible", "All Other Perils Deductible", "Deductible Notes"
     ], data)
     pdf.add_bullet_section("Endorsements Summary", data.get("Endorsements Summary", "N/A"))
     pdf.add_bullet_section("Exclusions Summary", data.get("Exclusions Summary", "N/A"))
     pdf.output(filename)
 
-# Merge summary and uploaded PDF
+# Merge Summary and Original PDF
 def merge_pdfs(summary_path, original_path, output_path):
     merger = PdfMerger()
     merger.append(summary_path)
@@ -184,7 +180,7 @@ def merge_pdfs(summary_path, original_path, output_path):
     merger.write(output_path)
     merger.close()
 
-# Streamlit app
+# Streamlit UI
 st.set_page_config(page_title="Insurance PDF Extractor")
 st.title("📄 Insurance Document Extractor")
 
