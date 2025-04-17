@@ -3,7 +3,7 @@ import pdfplumber
 import pandas as pd
 import os
 from dotenv import load_dotenv
-import openai
+from openai import OpenAI
 from fpdf import FPDF
 import tempfile
 from PyPDF2 import PdfMerger
@@ -11,11 +11,10 @@ import re
 
 # Load API key
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 KITCO_BLUE = (33, 135, 132)
 KITCO_GREEN = (61, 153, 93)
-KITCO_GOLD = (191, 127, 43)
 KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"
 
 def extract_text_from_pdf(pdf_file):
@@ -24,41 +23,34 @@ def extract_text_from_pdf(pdf_file):
 
 def extract_fields_from_text(text):
     prompt = f"""
-You are a commercial insurance analyst reviewing a quote packet.
+You are a commercial insurance expert reviewing a property insurance quote.
+Extract the following fields. Look in invoice tables, footnotes, or coverage details. Return "N/A" if not found.
 
-Please extract the following fields using your best judgment. Look for invoice-style tables, subtotals, or summary lines:
-- Premium (may appear as "Total Premium", "Annual Premium", "Premium Due")
-- Taxes (look for "Surplus Lines Tax", "State Tax", or combined lines)
-- Fees (includes Policy Fee, Stamping Fee, etc.)
-- Policy Number (anywhere in document)
+Insured Name
+Named Insured Type
+Mailing Address
+Property Address
+Effective Date
+Expiration Date
+Premium
+Taxes
+Fees
+Total Insured Value
+Policy Number
+Coverage Type
+Carrier Name
+Broker Name
+Underwriting Contact Email
+Wind Deductible
+Hail Deductible
+Named Storm Deductible
+All Other Perils Deductible
+Deductible Notes
+Endorsements Summary (bullet list)
+Exclusions Summary (bullet list)
 
-Also find:
-- Insured Name
-- Named Insured Type
-- Mailing Address
-- Property Address
-- Effective Date
-- Expiration Date
-- Total Insured Value
-- Coverage Type (Property, Liability, Umbrella, etc.)
-- Carrier Name
-- Broker Name
-- Underwriting Contact Email
-
-And deductibles (may appear in charts, footnotes, or endorsement sections):
-- Wind Deductible
-- Hail Deductible
-- Named Storm Deductible
-- All Other Perils Deductible
-- Deductible Notes (brief summary)
-
-Also provide:
-- Endorsements Summary: a bullet list of all endorsements listed by name or form number.
-- Exclusions Summary: a bullet list of all exclusions mentioned or referenced.
-
-Return each value clearly in this format:
+Return in this format:
 Insured Name: ...
-Named Insured Type: ...
 ...
 Endorsements Summary:
 - ...
@@ -69,7 +61,7 @@ Exclusions Summary:
 {text[:7000]}
 --- DOCUMENT END ---
 """
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
         temperature=0
@@ -120,10 +112,11 @@ class SummaryPDF(FPDF):
         self.cell(0, 10, title, ln=True)
         self.set_text_color(0, 0, 0)
         self.set_font("Helvetica", size=8)
-        for line in content.strip().split("\n"):
-            if line.startswith("-"):
-                self.cell(5)
-                self.multi_cell(0, 5, f"• {line[1:].strip()}", align="L")
+        for line in content.split("\n"):
+            for bullet in line.split(" - "):
+                if bullet.strip():
+                    self.cell(5)
+                    self.multi_cell(0, 5, f"• {bullet.strip()}", align="L")
 
 def generate_pdf_summary(data, filename):
     pdf = SummaryPDF()
