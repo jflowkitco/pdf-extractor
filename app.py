@@ -118,15 +118,18 @@ def parse_output_to_dict(text_output):
     return data
 
 def generate_pdf_summary(data, filename):
+    def safe_text(text):
+        return text.encode("latin-1", "replace").decode("latin-1")
+
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(200, 10, txt="Insurance Document Summary", ln=True, align="C")
+    pdf.cell(200, 10, txt=safe_text("Insurance Document Summary"), ln=True, align="C")
     pdf.ln(10)
 
     pdf.set_font("Arial", size=12)
     for key, value in data.items():
-        pdf.multi_cell(0, 10, txt=f"{key}: {value}", align="L")
+        pdf.multi_cell(0, 10, txt=safe_text(f"{key}: {value}"), align="L")
         pdf.ln(1)
 
     pdf.output(filename)
