@@ -4,11 +4,10 @@ import pandas as pd
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
-from dotenv import load_dotenv
 
 # Load .env and set API key
-from openai import OpenAI
-client = OpenAI()
+load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def extract_text_from_pdf(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
@@ -19,64 +18,82 @@ def extract_text_from_pdf(pdf_file):
 
 def extract_fields_from_text(text):
     prompt = f"""
-    Extract the following details from this insurance document:
-    def extract_fields_from_text(text):
-    prompt = f"""
 Extract the following details from this insurance document:
 
-    - Insured Name
-    - Named Insured Type (e.g. LLC, Trust, Individual)
-    - Mailing Address
-    - Property Address
-    - Effective Date
-    - Expiration Date
-    - Premium
-    - Taxes
-    - Fees
-    - Total Insured Value
-    - Policy Number
-    - Coverage Type (e.g. Special, Basic, Fire Only)
-    - Carrier Name
-    - Broker Name
-    - Underwriting Contact Email
+- Insured Name
+- Named Insured Type (e.g. LLC, Trust, Individual)
+- Mailing Address
+- Property Address
+- Effective Date
+- Expiration Date
+- Premium
+- Taxes
+- Fees
+- Total Insured Value
+- Policy Number
+- Coverage Type (e.g. Special, Basic, Fire Only)
+- Carrier Name
+- Broker Name
+- Underwriting Contact Email
 
 Please return them in this format exactly:
 
-    Insured Name: ...
-    Named Insured Type: ...
-    Mailing Address: ...
-    Property Address: ...
-    Effective Date: ...
-    Expiration Date: ...
-    Premium: ...
-    Taxes: ...
-    Fees: ...
-    Total Insured Value: ...
-    Policy Number: ...
-    Coverage Type: ...
-    Carrier Name: ...
-    Broker Name: ...
-    Underwriting Contact Email: ...
+Insured Name: ...
+Named Insured Type: ...
+Mailing Address: ...
+Property Address: ...
+Effective Date: ...
+Expiration Date: ...
+Premium: ...
+Taxes: ...
+Fees: ...
+Total Insured Value: ...
+Policy Number: ...
+Coverage Type: ...
+Carrier Name: ...
+Broker Name: ...
+Underwriting Contact Email: ...
 
 --- DOCUMENT START ---
-{text[:6000
-    --- DOCUMENT END ---
-    """
-
+{text[:6000]}
+--- DOCUMENT END ---
+"""
     response = client.chat.completions.create(
-    model="gpt-3.5-turbo",
-    messages=[{"role": "user", "content": prompt}],
-    temperature=0
-)
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0
+    )
     return response.choices[0].message.content
 
-
 def parse_output_to_dict(text_output):
-    data = {}
+    expected_fields = [
+        "Insured Name",
+        "Named Insured Type",
+        "Mailing Address",
+        "Property Address",
+        "Effective Date",
+        "Expiration Date",
+        "Premium",
+        "Taxes",
+        "Fees",
+        "Total Insured Value",
+        "Policy Number",
+        "Coverage Type",
+        "Carrier Name",
+        "Broker Name",
+        "Underwriting Contact Email"
+    ]
+
+    data = {field: "N/A" for field in expected_fields}
+
     for line in text_output.strip().split("\n"):
         if ":" in line:
             key, value = line.split(":", 1)
-            data[key.strip()] = value.strip()
+            key = key.strip()
+            value = value.strip()
+            if key in data:
+                data[key] = value if value else "N/A"
+
     return data
 
 # Streamlit UI
