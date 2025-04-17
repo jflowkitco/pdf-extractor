@@ -132,7 +132,7 @@ def parse_output_to_dict(text_output):
     return data
 
 # Streamlit UI
-st.set_page_config(page_title="Insurance PDF Extractor")
+st.set_page_config(page_title="Insurance PDF Extractor", layout="wide")
 st.title("\U0001F4C4 Insurance Document Extractor")
 
 uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
@@ -143,14 +143,41 @@ if uploaded_file is not None:
 
     st.success("Sending to GPT...")
     fields_output = extract_fields_from_text(text)
-    st.code(fields_output)
-
     data_dict = parse_output_to_dict(fields_output)
-    df = pd.DataFrame([data_dict])
 
-    st.dataframe(df)
+    st.subheader("\U0001F4DD Summary")
+    st.markdown(f"""
+    **Insured Name:** {data_dict['Insured Name']}  
+    **Named Insured Type:** {data_dict['Named Insured Type']}  
+    **Mailing Address:** {data_dict['Mailing Address']}  
+    **Property Address:** {data_dict['Property Address']}  
+    **Effective Date:** {data_dict['Effective Date']}  
+    **Expiration Date:** {data_dict['Expiration Date']}  
+    **Premium:** {data_dict['Premium']}  
+    **Taxes:** {data_dict['Taxes']}  
+    **Fees:** {data_dict['Fees']}  
+    **Total Insured Value:** {data_dict['Total Insured Value']}  
+    **Policy Number:** {data_dict['Policy Number']}  
+    **Coverage Type:** {data_dict['Coverage Type']}  
+    **Carrier Name:** {data_dict['Carrier Name']}  
+    **Broker Name:** {data_dict['Broker Name']}  
+    **Underwriting Contact Email:** {data_dict['Underwriting Contact Email']}  
+    
+    **Wind Deductible:** {data_dict['Wind Deductible']}  
+    **Hail Deductible:** {data_dict['Hail Deductible']}  
+    **Named Storm Deductible:** {data_dict['Named Storm Deductible']}  
+    **All Other Perils Deductible:** {data_dict['All Other Perils Deductible']}  
+    **Deductible Notes:** {data_dict['Deductible Notes']}  
 
-    csv = df.to_csv(index=False).encode("utf-8")
+    ---
+    **Endorsements Summary**  
+    {data_dict['Endorsements Summary']}
+
+    **Exclusions Summary**  
+    {data_dict['Exclusions Summary']}
+    """)
+
+    csv = pd.DataFrame([data_dict]).to_csv(index=False).encode("utf-8")
     st.download_button(
         label="\U0001F4E5 Download CSV",
         data=csv,
