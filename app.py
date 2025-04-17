@@ -4,7 +4,6 @@ import pandas as pd
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
-import re
 
 # Load API key from .env
 load_dotenv()
@@ -19,23 +18,8 @@ def extract_text_from_pdf(pdf_file):
                 text += page_text + "\n"
         return text
 
-def chunk_text(text, max_chars=6000):
-    chunks = []
-    while len(text) > max_chars:
-        split_index = text[:max_chars].rfind("\n")
-        if split_index == -1:
-            split_index = max_chars
-        chunks.append(text[:split_index])
-        text = text[split_index:]
-    chunks.append(text)
-    return chunks
-
 def extract_fields_from_text(text):
-    chunks = chunk_text(text)
-    combined_response = ""
-
-    for i, chunk in enumerate(chunks):
-        prompt = f"""
+    prompt = f"""
 You are an insurance policy analysis bot.
 
 Your job is to extract and infer the following fields from the insurance document below. Use context and examples to identify data even when labels are inconsistent.
@@ -71,7 +55,7 @@ Separate into two fields:
 
 If any fields are not present, return "N/A". For the summaries, return "N/A" if no content is found.
 
-Return the data in this exact format with readable wrapping and line breaks for summaries:
+Return the data in this exact format:
 Insured Name: ...
 Named Insured Type: ...
 Mailing Address: ...
@@ -96,17 +80,15 @@ Endorsements Summary: ...
 Exclusions Summary: ...
 
 --- DOCUMENT START ---
-{chunk}
+{text}
 --- DOCUMENT END ---
 """
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0
-        )
-        combined_response += response.choices[0].message.content + "\n"
-
-    return combined_response
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0
+    )
+    return response.choices[0].message.content
 
 def parse_output_to_dict(text_output):
     expected_fields = [
@@ -134,20 +116,8 @@ def parse_output_to_dict(text_output):
     return data
 
 # Streamlit UI
-st.set_page_config(page_title="Insurance PDF Extractor", layout="wide")
-st.markdown("""
-    <style>
-        .reportview-container .main { background-color: #F9FAFB; padding: 2rem; }
-        h1 { color: #3A699A; }
-        .stButton>button { background-color: #218784; color: white; border-radius: 10px; padding: 0.5em 1em; }
-        .stDownloadButton>button { background-color: #BF7F2B; color: white; border-radius: 10px; padding: 0.5em 1em; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px 15px; border: 1px solid #ddd; text-align: left; }
-        th { background-color: #3A699A; color: white; }
-    </style>
-    <img src="https://raw.githubusercontent.com/jflowkitco/pdf-extractor/main/KITCO%20HORIZ%20FULL%20(1).png" width="300">
-    <h1>Insurance Document Extractor</h1>
-""", unsafe_allow_html=True)
+st.set_page_config(page_title="Insurance PDF Extractor")
+st.title("📄 Insurance Document Extractor")
 
 uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
 
@@ -160,22 +130,9 @@ if uploaded_file is not None:
     data_dict = parse_output_to_dict(fields_output)
 
     st.subheader("📝 Extracted Details")
+    for field, value in data_dict.items():
+        st.markdown(f"**{field}:** {value}")
 
-    # Create a DataFrame for clean tabular display
-    table_df = pd.DataFrame(list(data_dict.items()), columns=["Field", "Value"])
-    st.markdown("""
-    <table>
-        <thead><tr><th>Field</th><th>Value</th></tr></thead>
-        <tbody>
-    """, unsafe_allow_html=True)
-    for _, row in table_df.iterrows():
-        st.markdown(f"<tr><td>{row['Field']}</td><td>{row['Value'].replace(chr(10), '<br>')}</td></tr>", unsafe_allow_html=True)
-    st.markdown("""
-        </tbody>
-    </table>
-    """, unsafe_allow_html=True)
-
-    # Downloadable CSV
     csv = pd.DataFrame([data_dict]).to_csv(index=False).encode("utf-8")
     st.download_button(
         label="📥 Download CSV",
