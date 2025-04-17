@@ -3,19 +3,18 @@ import pdfplumber
 import pandas as pd
 import os
 from dotenv import load_dotenv
-import openai
+from openai import OpenAI
 from fpdf import FPDF
 import tempfile
-from PyPDF2 import PdfMerger, PdfReader
+from PyPDF2 import PdfMerger
 
 # Load API key from .env
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 KITCO_BLUE = (33, 135, 132)
 KITCO_GREEN = (61, 153, 93)
 KITCO_GOLD = (191, 127, 43)
-
 KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"  # Ensure this is uploaded with your app
 
 # Function to extract text from PDF
@@ -83,14 +82,14 @@ Exclusions Summary: ...
 {text[:6000]}
 --- DOCUMENT END ---
 """
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
         temperature=0
     )
     return response.choices[0].message.content
 
-# Parse GPT output
+# Function to parse GPT response to dictionary and calculate rate
 def parse_output_to_dict(text_output):
     data = {}
     for line in text_output.strip().split("\n"):
@@ -103,7 +102,7 @@ def parse_output_to_dict(text_output):
         tiv = float(data.get("Total Insured Value", "0").replace("$", "").replace(",", ""))
         if tiv > 0:
             rate = round((premium / tiv) * 100, 3)
-            data["Rate"] = f"${rate}"
+            data["Rate"] = f"${rate:.3f}"
         else:
             data["Rate"] = "N/A"
     except:
@@ -111,7 +110,7 @@ def parse_output_to_dict(text_output):
 
     return data
 
-# PDF Summary Class
+# Function to create PDF summary
 class SummaryPDF(FPDF):
     def header(self):
         if os.path.exists(KITCO_LOGO_PATH):
@@ -126,14 +125,13 @@ class SummaryPDF(FPDF):
         self.set_text_color(*KITCO_GREEN)
         self.set_font("Helvetica", "B", 12)
         self.cell(0, 10, title, ln=True)
-        self.set_text_color(0, 0, 0)
         self.set_font("Helvetica", size=11)
         for field in fields:
             value = data.get(field, "N/A")
             self.set_text_color(*KITCO_BLUE)
-            self.cell(0, 6, f"{field}:", ln=False)
+            self.cell(0, 6, f"{field}: ", ln=False)
             self.set_text_color(0, 0, 0)
-            self.multi_cell(0, 6, f" {value}", align="L")
+            self.cell(0, 6, f"{value}", ln=True)
 
     def add_bullet_section(self, title, content):
         self.set_text_color(*KITCO_GREEN)
@@ -147,6 +145,7 @@ class SummaryPDF(FPDF):
                     self.cell(5)
                     self.multi_cell(0, 5, f"• {bullet.strip()}", align="L")
 
+# Generate PDF summary
 def generate_pdf_summary(data, filename):
     pdf = SummaryPDF()
     pdf.add_page()
@@ -168,6 +167,7 @@ def generate_pdf_summary(data, filename):
     pdf.add_bullet_section("Exclusions Summary", data.get("Exclusions Summary", "N/A"))
     pdf.output(filename)
 
+# Merge summary and uploaded PDF
 def merge_pdfs(summary_path, original_path, output_path):
     merger = PdfMerger()
     merger.append(summary_path)
@@ -178,7 +178,7 @@ def merge_pdfs(summary_path, original_path, output_path):
     merger.write(output_path)
     merger.close()
 
-# Streamlit App
+# Streamlit app
 st.set_page_config(page_title="Insurance PDF Extractor")
 st.title("📄 Insurance Document Extractor")
 
