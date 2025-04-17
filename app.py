@@ -2,10 +2,11 @@ import streamlit as st
 import pdfplumber
 import pandas as pd
 import os
+import re
 from dotenv import load_dotenv
 from openai import OpenAI
 
-# Load API key from .env
+# Load API key
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -18,59 +19,47 @@ def extract_text_from_pdf(pdf_file):
 
 def extract_fields_from_text(text):
     prompt = f"""
-You are an insurance document analysis assistant.
+You are an insurance document extraction assistant.
 
-Your task is to extract and infer the following details from the insurance quote or binder text below. Use common insurance document patterns and context clues to identify data points even when labels are inconsistent or formatted differently.
+Extract the following fields from the insurance text. Look for synonyms and phrases like "premium: $5,000 (plus taxes)" or "Fees – $50". Capture values even if part of a sentence or parentheses.
 
-### Fields to extract:
+### Fields:
 - Insured Name
-- Named Insured Type (e.g. LLC, Trust, Individual)
+- Named Insured Type
 - Mailing Address
 - Property Address
 - Effective Date
 - Expiration Date
-- Premium (even if written as "Premium: $X,XXX (plus applicable taxes)")
+- Premium
 - Taxes
 - Fees
 - Total Insured Value
-- Policy Number (look for variations like "Policy#", "Policy No.", etc.)
-- Coverage Type (e.g. Property, Liability, Umbrella)
+- Policy Number
+- Coverage Type (Property, Liability, Umbrella, etc.)
 - Carrier Name
 - Broker Name
 - Underwriting Contact Email
 
-### Deductibles to infer (even if not explicitly labeled):
+### Deductibles (use judgment if not labeled exactly):
 - Wind Deductible
 - Hail Deductible
 - Named Storm Deductible
 - All Other Perils Deductible
-- Deductible Notes (brief explanation of how deductibles apply)
+- Deductible Notes (describe deductible context if available)
 
-### Additional Summaries:
-- Endorsements Summary (list or describe endorsements)
-- Exclusions Summary (list or describe exclusions)
+### Summaries:
+- Endorsements Summary
+- Exclusions Summary
 
-If a field is not found, return "N/A". Format your answer exactly like this:
+Return values in this format:
 
 Insured Name: ...
 Named Insured Type: ...
-Mailing Address: ...
-Property Address: ...
-Effective Date: ...
-Expiration Date: ...
+...
 Premium: ...
 Taxes: ...
 Fees: ...
-Total Insured Value: ...
-Policy Number: ...
-Coverage Type: ...
-Carrier Name: ...
-Broker Name: ...
-Underwriting Contact Email: ...
-Wind Deductible: ...
-Hail Deductible: ...
-Named Storm Deductible: ...
-All Other Perils Deductible: ...
+...
 Deductible Notes: ...
 Endorsements Summary: ...
 Exclusions Summary: ...
@@ -86,7 +75,21 @@ Exclusions Summary: ...
     )
     return response.choices[0].message.content
 
-def parse_output_to_dict(text_output):
+def fallback_regex(text, field_name):
+    if field_name == "Premium":
+        match = re.search(r"Premium[^$\n]*\$[0-9,]+(?:\.\d{2})?", text, re.IGNORECASE)
+    elif field_name == "Taxes":
+        match = re.search(r"Tax(?:es)?[^$\n]*\$[0-9,]+(?:\.\d{2})?", text, re.IGNORECASE)
+    elif field_name == "Fees":
+        match = re.search(r"Fee(?:s)?[^$\n]*\$[0-9,]+(?:\.\d{2})?", text, re.IGNORECASE)
+    elif field_name == "Policy Number":
+        match = re.search(r"(Policy\s?(Number|No\.?)[:\s]*)([\w\-\/]+)", text, re.IGNORECASE)
+        return match.group(3).strip() if match else "N/A"
+    else:
+        return "N/A"
+    return match.group(0).split("$")[1].strip() if match else "N/A"
+
+def parse_output_to_dict(text_output, original_text):
     expected_fields = [
         "Insured Name", "Named Insured Type", "Mailing Address", "Property Address",
         "Effective Date", "Expiration Date", "Premium", "Taxes", "Fees",
@@ -108,7 +111,13 @@ def parse_output_to_dict(text_output):
                 current_field = key
                 data[current_field] = value
         elif current_field:
-            data[current_field] += "\n" + line.strip()
+            data[current_field] += " " + line.strip()
+
+    # Fallback if GPT missed these
+    for fallback_field in ["Premium", "Taxes", "Fees", "Policy Number"]:
+        if data[fallback_field] == "N/A":
+            data[fallback_field] = fallback_regex(original_text, fallback_field)
+
     return data
 
 # Streamlit UI
@@ -128,11 +137,11 @@ uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
 
 if uploaded_file is not None:
     st.info("Extracting text from PDF...")
-    text = extract_text_from_pdf(uploaded_file)
+    raw_text = extract_text_from_pdf(uploaded_file)
 
     st.success("Sending to GPT...")
-    fields_output = extract_fields_from_text(text)
-    data_dict = parse_output_to_dict(fields_output)
+    extracted = extract_fields_from_text(raw_text)
+    data_dict = parse_output_to_dict(extracted, raw_text)
 
     st.subheader("📝 Summary")
     for key, value in data_dict.items():
