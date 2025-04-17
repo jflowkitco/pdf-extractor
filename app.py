@@ -14,17 +14,49 @@ def extract_text_from_pdf(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
         text = ""
         for page in pdf.pages:
-            text += page.extract_text() + "\n"
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
     return text
 
 def extract_fields_from_text(text):
     prompt = f"""
-You are a smart insurance document analysis assistant.
+You are an insurance policy analysis bot.
 
-Extract all fields listed below from the following policy document text. Use examples, formatting patterns, and wording variations to infer answers when they are not labeled clearly. For summaries, extract multi-line bullets or sentence fragments that match the field context.
+Your job is to extract and infer the following fields from the insurance document below. Use context and examples to identify data even when labels are inconsistent or scattered across the document.
 
----
-**Required Output Format:**
+**Fields to extract:**
+- Insured Name
+- Named Insured Type (e.g. LLC, Trust, Individual)
+- Mailing Address
+- Property Address
+- Effective Date
+- Expiration Date
+- Premium (Look in premium summaries and tax summaries)
+- Taxes (Look for terms like "surplus lines tax", "tax summary", or "fee taxable")
+- Fees (Look for "service fee", "inspection fee", etc.)
+- Total Insured Value
+- Policy Number (Look near carrier name or underlined headings)
+- Coverage Type (e.g. Special, Basic, Fire Only)
+- Carrier Name
+- Broker Name
+- Underwriting Contact Email
+
+**Deductibles to infer (even if not explicitly labeled):**
+- Wind Deductible
+- Hail Deductible
+- Named Storm Deductible
+- All Other Perils Deductible
+- Deductible Notes (brief summary of any deductible-related language or assumptions)
+
+**Endorsement & Exclusion Summary:**
+Separate into two fields:
+- Endorsements Summary
+- Exclusions Summary
+
+If any fields are not present, return "N/A".
+
+Return the data in this exact format with readable wrapping and line breaks for summaries:
 Insured Name: ...
 Named Insured Type: ...
 Mailing Address: ...
@@ -47,16 +79,6 @@ All Other Perils Deductible: ...
 Deductible Notes: ...
 Endorsements Summary: ...
 Exclusions Summary: ...
----
-
-For example:
-Wind Deductible: 5% of Declared Values, minimum $25,000
-All Other Perils Deductible: $25,000
-Deductible Notes: Deductibles may vary by building or subject to minimums
-
-Summaries (if present) should include full bullet points or sentences.
-
-If data is not available, return "N/A".
 
 --- DOCUMENT START ---
 {text[:6000]}
