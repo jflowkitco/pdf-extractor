@@ -23,7 +23,6 @@ You are an insurance policy analysis bot.
 Your job is to extract and infer the following fields from the insurance document below. Use context and examples to identify data even when labels are inconsistent.
 
 **Fields to extract:**
-
 - Insured Name
 - Named Insured Type (e.g. LLC, Trust, Individual)
 - Mailing Address
@@ -41,27 +40,25 @@ Your job is to extract and infer the following fields from the insurance documen
 - Underwriting Contact Email
 
 **Deductibles to infer (even if not explicitly labeled):**
-
 - Wind Deductible
 - Hail Deductible
 - Named Storm Deductible
 - All Other Perils Deductible
 - Deductible Notes (brief summary of any deductible-related language or assumptions)
 
-**Also provide a short summary of endorsements and exclusions:**
+**Endorsement & Exclusion Summary:**
+Separate into two fields:
+- Endorsements Summary
+- Exclusions Summary
 
 Look for section titles or phrases like:
-- “Forms and Endorsements”
-- “This policy excludes…”
-- “The following is added to…”
-
-Summarize clearly in:
-- Endorsements and Exclusions Summary: ...
+- "Forms and Endorsements"
+- "This policy excludes…"
+- "The following is added to…"
 
 If any fields are not present, return "N/A".
 
 **Return the data in this exact format:**
-
 Insured Name: ...
 Named Insured Type: ...
 Mailing Address: ...
@@ -82,7 +79,8 @@ Hail Deductible: ...
 Named Storm Deductible: ...
 All Other Perils Deductible: ...
 Deductible Notes: ...
-Endorsements and Exclusions Summary: ...
+Endorsements Summary: ...
+Exclusions Summary: ...
 
 --- DOCUMENT START ---
 {text[:6000]}
@@ -117,7 +115,8 @@ def parse_output_to_dict(text_output):
         "Named Storm Deductible",
         "All Other Perils Deductible",
         "Deductible Notes",
-        "Endorsements and Exclusions Summary"
+        "Endorsements Summary",
+        "Exclusions Summary"
     ]
 
     data = {field: "N/A" for field in expected_fields}
@@ -134,7 +133,7 @@ def parse_output_to_dict(text_output):
 
 # Streamlit UI
 st.set_page_config(page_title="Insurance PDF Extractor")
-st.title("📄 Insurance Document Extractor")
+st.title("\U0001F4C4 Insurance Document Extractor")
 
 uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
 
@@ -153,7 +152,7 @@ if uploaded_file is not None:
 
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button(
-        label="📥 Download CSV",
+        label="\U0001F4E5 Download CSV",
         data=csv,
         file_name="extracted_data.csv",
         mime="text/csv"
