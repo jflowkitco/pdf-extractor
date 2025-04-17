@@ -3,14 +3,14 @@ import pdfplumber
 import pandas as pd
 import os
 from dotenv import load_dotenv
-from openai import OpenAI
+import openai
 from fpdf import FPDF
 import tempfile
 from PyPDF2 import PdfMerger, PdfReader
 
 # Load API key from .env
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 KITCO_BLUE = (33, 135, 132)
 KITCO_GREEN = (61, 153, 93)
@@ -18,53 +18,44 @@ KITCO_GOLD = (191, 127, 43)
 
 KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"  # Ensure this is uploaded with your app
 
-def extract_text_by_page(pdf_file):
-    page_texts = []
+# Function to extract text from PDF
+def extract_text_from_pdf(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
-        for i, page in enumerate(pdf.pages):
-            text = page.extract_text()
-            if text:
-                page_texts.append((i + 1, text))
-    return page_texts
+        text = ""
+        for page in pdf.pages:
+            text += page.extract_text() + "\n"
+    return text
 
+# Function to call OpenAI and extract data
 def extract_fields_from_text(text):
     prompt = f"""
-You are an insurance policy analysis bot.
+Extract the following details from this insurance document:
 
-Your job is to extract and infer the following fields from the insurance document below. Use context and examples to identify data even when labels are inconsistent. Look for information in sections like premium breakdowns, declarations, or coverage summaries.
-
-**Fields to extract:**
 - Insured Name
-- Named Insured Type (e.g. LLC, Trust, Individual)
+- Named Insured Type
 - Mailing Address
 - Property Address
 - Effective Date
 - Expiration Date
-- Premium (total or combined if multiple lines)
+- Premium
 - Taxes
 - Fees
 - Total Insured Value
-- Policy Number (look near the top, in declaration or coverage summary pages)
+- Policy Number
 - Coverage Type (e.g. Property, Liability, Umbrella)
 - Carrier Name
 - Broker Name
 - Underwriting Contact Email
-
-**Deductibles to infer (even if not explicitly labeled):**
 - Wind Deductible
 - Hail Deductible
 - Named Storm Deductible
 - All Other Perils Deductible
-- Deductible Notes (brief summary of any deductible-related language or assumptions)
+- Deductible Notes
+- Endorsements Summary (bullet list format)
+- Exclusions Summary (bullet list format)
 
-**Endorsement & Exclusion Summary:**
-Separate into two fields:
-- Endorsements Summary
-- Exclusions Summary
+Return results in this format exactly:
 
-If any fields are not present, return "N/A". For the summaries, return "N/A" if no content is found.
-
-Return the data in this exact format:
 Insured Name: ...
 Named Insured Type: ...
 Mailing Address: ...
@@ -89,52 +80,31 @@ Endorsements Summary: ...
 Exclusions Summary: ...
 
 --- DOCUMENT START ---
-{text}
+{text[:6000]}
 --- DOCUMENT END ---
 """
-    response = client.chat.completions.create(
+
+    response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
         temperature=0
     )
     return response.choices[0].message.content
 
+# Function to parse GPT response to dictionary and calculate rate
 def parse_output_to_dict(text_output):
-    expected_fields = [
-        "Insured Name", "Named Insured Type", "Mailing Address", "Property Address",
-        "Effective Date", "Expiration Date", "Premium", "Taxes", "Fees",
-        "Total Insured Value", "Policy Number", "Coverage Type", "Carrier Name",
-        "Broker Name", "Underwriting Contact Email", "Wind Deductible", "Hail Deductible",
-        "Named Storm Deductible", "All Other Perils Deductible", "Deductible Notes",
-        "Endorsements Summary", "Exclusions Summary"
-    ]
-
-    data = {field: "N/A" for field in expected_fields}
-    lines = text_output.strip().splitlines()
-    current_field = None
-    for line in lines:
+    data = {}
+    for line in text_output.strip().split("\n"):
         if ":" in line:
-            key_part, value_part = line.split(":", 1)
-            key = key_part.strip()
-            value = value_part.strip()
-            if key in expected_fields:
-                current_field = key
-                data[current_field] = value
-        elif current_field:
-            data[current_field] += " " + line.strip()
+            key, value = line.split(":", 1)
+            data[key.strip()] = value.strip()
 
-    # Format Endorsements Summary as bullet list
-    if data["Endorsements Summary"] != "N/A":
-        bullets = data["Endorsements Summary"].split(" - ")
-        data["Endorsements Summary"] = "\n".join(f"• {b.strip()}" for b in bullets if b.strip())
-
-    # Add rate calculation if Premium and Total Insured Value are present
     try:
-        premium = float(data["Premium"].replace("$", "").replace(",", ""))
-        tiv = float(data["Total Insured Value"].replace("$", "").replace(",", ""))
+        premium = float(data.get("Premium", "0").replace("$", "").replace(",", ""))
+        tiv = float(data.get("Total Insured Value", "0").replace("$", "").replace(",", ""))
         if tiv > 0:
-            rate = (premium / tiv) * 100
-            data["Rate"] = f"${rate:.3f}"
+            rate = round((premium / tiv) * 100, 3)
+            data["Rate"] = f"${rate}"
         else:
             data["Rate"] = "N/A"
     except:
@@ -142,4 +112,107 @@ def parse_output_to_dict(text_output):
 
     return data
 
-# Other functions remain unchanged...
+# Function to create PDF summary
+class SummaryPDF(FPDF):
+    def header(self):
+        if os.path.exists(KITCO_LOGO_PATH):
+            self.image(KITCO_LOGO_PATH, 10, 8, 60)
+        self.set_font("Helvetica", "B", 14)
+        self.set_text_color(*KITCO_BLUE)
+        self.ln(20)
+        self.cell(0, 10, "Insurance Summary", ln=True, align="C")
+        self.ln(10)
+
+    def add_data_section(self, title, fields, data):
+        self.set_text_color(*KITCO_GREEN)
+        self.set_font("Helvetica", "B", 12)
+        self.cell(0, 10, title, ln=True)
+        self.set_text_color(0, 0, 0)
+        self.set_font("Palatino", size=11)
+        for field in fields:
+            value = data.get(field, "N/A")
+            self.set_text_color(*KITCO_BLUE)
+            self.cell(60, 6, f"{field}:", ln=False)
+            self.set_text_color(0, 0, 0)
+            self.multi_cell(0, 6, f" {value}", align="L")
+
+    def add_bullet_section(self, title, content):
+        self.set_text_color(*KITCO_GREEN)
+        self.set_font("Helvetica", "B", 12)
+        self.cell(0, 10, title, ln=True)
+        self.set_text_color(0, 0, 0)
+        self.set_font("Palatino", size=8)
+        for line in content.split("\n"):
+            for bullet in line.split(" - "):
+                if bullet.strip():
+                    self.cell(5)
+                    self.multi_cell(0, 5, f"• {bullet.strip()}", align="L")
+
+# Generate PDF summary
+
+def generate_pdf_summary(data, filename):
+    pdf = SummaryPDF()
+    pdf.add_page()
+    pdf.add_data_section("Insured Details", [
+        "Insured Name", "Named Insured Type", "Mailing Address", "Property Address",
+        "Underwriting Contact Email"
+    ], data)
+    pdf.add_data_section("Coverage Dates and Values", [
+        "Effective Date", "Expiration Date", "Premium", "Taxes", "Fees", "Total Insured Value", "Rate"
+    ], data)
+    pdf.add_data_section("Policy Info", [
+        "Policy Number", "Coverage Type", "Carrier Name", "Broker Name"
+    ], data)
+    pdf.add_data_section("Deductibles", [
+        "Wind Deductible", "Hail Deductible", "Named Storm Deductible",
+        "All Other Perils Deductible", "Deductible Notes"
+    ], data)
+    pdf.add_bullet_section("Endorsements Summary", data.get("Endorsements Summary", "N/A"))
+    pdf.add_bullet_section("Exclusions Summary", data.get("Exclusions Summary", "N/A"))
+    pdf.output(filename)
+
+# Merge summary and uploaded PDF
+
+def merge_pdfs(summary_path, original_path, output_path):
+    merger = PdfMerger()
+    merger.append(summary_path)
+    try:
+        merger.append(original_path)
+    except Exception:
+        pass
+    merger.write(output_path)
+    merger.close()
+
+# Streamlit app
+st.set_page_config(page_title="Insurance PDF Extractor")
+st.title("📄 Insurance Document Extractor")
+
+uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
+
+if uploaded_file is not None:
+    st.info("Extracting text from PDF...")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_uploaded:
+        temp_uploaded.write(uploaded_file.read())
+        temp_uploaded_path = temp_uploaded.name
+
+    text = extract_text_from_pdf(temp_uploaded_path)
+
+    st.success("Sending to GPT...")
+    fields_output = extract_fields_from_text(text)
+    st.code(fields_output)
+
+    data_dict = parse_output_to_dict(fields_output)
+    df = pd.DataFrame([data_dict])
+    st.dataframe(df)
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_summary:
+        generate_pdf_summary(data_dict, temp_summary.name)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_merged:
+            merge_pdfs(temp_summary.name, temp_uploaded_path, temp_merged.name)
+            with open(temp_merged.name, "rb") as f:
+                st.download_button(
+                    label="📥 Download Merged PDF Report",
+                    data=f.read(),
+                    file_name="insurance_summary.pdf",
+                    mime="application/pdf"
+                )
