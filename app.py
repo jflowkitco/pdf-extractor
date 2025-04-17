@@ -22,7 +22,7 @@ def extract_fields_from_text(text):
     prompt = f"""
 You are an insurance policy analysis bot.
 
-Your job is to extract and infer the following fields from the insurance document below. Use context and examples to identify data even when labels are inconsistent.
+Your job is to extract and infer the following fields from the insurance document below. Use context and examples to identify data even when labels are inconsistent. Look for information in sections like premium breakdowns, declarations, or coverage summaries.
 
 **Fields to extract:**
 - Insured Name
@@ -31,11 +31,11 @@ Your job is to extract and infer the following fields from the insurance documen
 - Property Address
 - Effective Date
 - Expiration Date
-- Premium
+- Premium (total or combined if multiple lines)
 - Taxes
 - Fees
 - Total Insured Value
-- Policy Number
+- Policy Number (look near the top, in declaration or coverage summary pages)
 - Coverage Type (e.g. Property, Liability, Umbrella)
 - Carrier Name
 - Broker Name
