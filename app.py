@@ -122,7 +122,6 @@ def parse_output_to_dict(text_output):
 
     data = {field: "N/A" for field in expected_fields}
 
-    # Pre-clean awkward line breaks and symbols
     cleaned = re.sub(r"[\*\n]+", " ", text_output)
     lines = cleaned.strip().split("\n")
 
@@ -138,7 +137,31 @@ def parse_output_to_dict(text_output):
 
 # Streamlit UI
 st.set_page_config(page_title="Insurance PDF Extractor", layout="wide")
-st.title("\U0001F4C4 Insurance Document Extractor")
+st.markdown("""
+    <style>
+        .reportview-container .main {{
+            background-color: #F9FAFB;
+            padding: 2rem;
+        }}
+        h1 {{
+            color: #3A699A;
+        }}
+        .stButton>button {{
+            background-color: #218784;
+            color: white;
+            border-radius: 10px;
+            padding: 0.5em 1em;
+        }}
+        .stDownloadButton>button {{
+            background-color: #BF7F2B;
+            color: white;
+            border-radius: 10px;
+            padding: 0.5em 1em;
+        }}
+    </style>
+    <img src="https://raw.githubusercontent.com/jflowkitco/pdf-extractor/main/KITCO%20HORIZ%20FULL%20(1).png" width="300">
+    <h1>Insurance Document Extractor</h1>
+""", unsafe_allow_html=True)
 
 uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
 
