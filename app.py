@@ -15,44 +15,52 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 KITCO_BLUE = (33, 135, 132)
 KITCO_GREEN = (61, 153, 93)
 KITCO_GOLD = (191, 127, 43)
-KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"  # Make sure this is in the project folder
+KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"
 
 def extract_text_from_pdf(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
         text = ""
         for page in pdf.pages:
-            text += page.extract_text() + "\n"
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
     return text
 
 def extract_fields_from_text(text):
     prompt = f"""
-You are a commercial insurance analyst. Extract the requested data from the document. Read all invoice sections carefully. Look for values in tables, sentences, and itemized costs. If data isn't listed, return "N/A". Include anything in parentheses (like "plus applicable premium tax").
+You are reviewing a commercial property insurance quote. Extract the following details. These fields may appear in different formats or sections such as invoices, summary pages, declarations, or endorsement listings. Be accurate and thorough.
 
-Extract the following fields:
+Required Fields:
 - Insured Name
 - Named Insured Type
 - Mailing Address
 - Property Address
 - Effective Date
 - Expiration Date
-- Premium
+- Premium (include anything in parentheses like "plus applicable premium tax")
 - Taxes
 - Fees
 - Total Insured Value
-- Policy Number
+- Policy Number (look near insured name or coverage details)
 - Coverage Type (e.g. Property, Liability, Umbrella)
 - Carrier Name
 - Broker Name
 - Underwriting Contact Email
+
+Deductibles:
 - Wind Deductible
 - Hail Deductible
 - Named Storm Deductible
 - All Other Perils Deductible
 - Deductible Notes
-- Endorsements Summary (bullet list)
-- Exclusions Summary (bullet list)
 
-Return in this format:
+Endorsements Summary:
+Return as a bulleted list (e.g., "- Total Loss Endorsement, - Virus/Bacteria Exclusion")
+
+Exclusions Summary:
+Return as a bulleted list (e.g., "- Flood, - EQSL")
+
+Return this format exactly:
 
 Insured Name: ...
 Named Insured Type: ...
@@ -74,11 +82,15 @@ Hail Deductible: ...
 Named Storm Deductible: ...
 All Other Perils Deductible: ...
 Deductible Notes: ...
-Endorsements Summary: ...
-Exclusions Summary: ...
+Endorsements Summary:
+- ...
+- ...
+Exclusions Summary:
+- ...
+- ...
 
 --- DOCUMENT START ---
-{text[:12000]}
+{text[:15000]}
 --- DOCUMENT END ---
 """
     response = client.chat.completions.create(
@@ -91,12 +103,15 @@ Exclusions Summary: ...
 def parse_output_to_dict(text_output):
     data = {}
     for line in text_output.strip().split("\n"):
-        if ":" in line:
+        if ":" in line and not line.startswith("-"):
             key, value = line.split(":", 1)
             data[key.strip()] = value.strip()
+        elif line.startswith("-"):
+            last_key = list(data.keys())[-1]
+            data[last_key] += f"\n{line.strip()}"
 
     try:
-        premium = float(data.get("Premium", "0").replace("$", "").replace(",", ""))
+        premium = float(data.get("Premium", "0").replace("$", "").replace(",", "").split()[0])
         tiv = float(data.get("Total Insured Value", "0").replace("$", "").replace(",", ""))
         if tiv > 0:
             rate = round((premium / tiv) * 100, 3)
@@ -128,7 +143,7 @@ class SummaryPDF(FPDF):
             self.set_text_color(*KITCO_BLUE)
             self.cell(60, 6, f"{field}:", ln=False)
             self.set_text_color(0, 0, 0)
-            self.multi_cell(0, 6, f"{value}", align="L")
+            self.multi_cell(0, 6, value, align="L")
 
     def add_bullet_section(self, title, content):
         self.set_text_color(*KITCO_GREEN)
@@ -137,10 +152,10 @@ class SummaryPDF(FPDF):
         self.set_text_color(0, 0, 0)
         self.set_font("Helvetica", size=8)
         for line in content.split("\n"):
-            for bullet in line.split(" - "):
-                if bullet.strip():
-                    self.cell(5)
-                    self.multi_cell(0, 5, f"• {bullet.strip()}", align="L")
+            line = line.strip(" -•")
+            if line:
+                self.cell(5)
+                self.multi_cell(0, 5, f"• {line.strip()}", align="L")
 
 def generate_pdf_summary(data, filename):
     pdf = SummaryPDF()
@@ -185,8 +200,8 @@ if uploaded_file is not None:
         temp_uploaded_path = temp_uploaded.name
 
     text = extract_text_from_pdf(temp_uploaded_path)
-
     st.success("Sending to GPT...")
+
     fields_output = extract_fields_from_text(text)
     st.code(fields_output)
 
