@@ -19,42 +19,12 @@ def extract_text_from_pdf(pdf_file):
 
 def extract_fields_from_text(text):
     prompt = f"""
-You are an insurance policy analysis bot.
+You are a smart insurance document analysis assistant.
 
-Your job is to extract and infer the following fields from the insurance document below. Use context and examples to identify data even when labels are inconsistent.
+Extract all fields listed below from the following policy document text. Use examples, formatting patterns, and wording variations to infer answers when they are not labeled clearly. For summaries, extract multi-line bullets or sentence fragments that match the field context.
 
-**Fields to extract:**
-- Insured Name
-- Named Insured Type (e.g. LLC, Trust, Individual)
-- Mailing Address
-- Property Address
-- Effective Date
-- Expiration Date
-- Premium
-- Taxes
-- Fees
-- Total Insured Value
-- Policy Number
-- Coverage Type (e.g. Special, Basic, Fire Only)
-- Carrier Name
-- Broker Name
-- Underwriting Contact Email
-
-**Deductibles to infer (even if not explicitly labeled):**
-- Wind Deductible
-- Hail Deductible
-- Named Storm Deductible
-- All Other Perils Deductible
-- Deductible Notes (brief summary of any deductible-related language or assumptions)
-
-**Endorsement & Exclusion Summary:**
-Separate into two fields:
-- Endorsements Summary
-- Exclusions Summary
-
-If any fields are not present, return "N/A". For the summaries, return "N/A" if no content is found.
-
-Return the data in this exact format with readable wrapping and line breaks for summaries:
+---
+**Required Output Format:**
 Insured Name: ...
 Named Insured Type: ...
 Mailing Address: ...
@@ -77,6 +47,16 @@ All Other Perils Deductible: ...
 Deductible Notes: ...
 Endorsements Summary: ...
 Exclusions Summary: ...
+---
+
+For example:
+Wind Deductible: 5% of Declared Values, minimum $25,000
+All Other Perils Deductible: $25,000
+Deductible Notes: Deductibles may vary by building or subject to minimums
+
+Summaries (if present) should include full bullet points or sentences.
+
+If data is not available, return "N/A".
 
 --- DOCUMENT START ---
 {text[:6000]}
@@ -118,10 +98,10 @@ def parse_output_to_dict(text_output):
 st.set_page_config(page_title="Insurance PDF Extractor", layout="wide")
 st.markdown("""
     <style>
-        .reportview-container .main {{ background-color: #F9FAFB; padding: 2rem; }}
-        h1 {{ color: #3A699A; }}
-        .stButton>button {{ background-color: #218784; color: white; border-radius: 10px; padding: 0.5em 1em; }}
-        .stDownloadButton>button {{ background-color: #BF7F2B; color: white; border-radius: 10px; padding: 0.5em 1em; }}
+        .reportview-container .main { background-color: #F9FAFB; padding: 2rem; }
+        h1 { color: #3A699A; }
+        .stButton>button { background-color: #218784; color: white; border-radius: 10px; padding: 0.5em 1em; }
+        .stDownloadButton>button { background-color: #BF7F2B; color: white; border-radius: 10px; padding: 0.5em 1em; }
     </style>
     <img src="https://raw.githubusercontent.com/jflowkitco/pdf-extractor/main/KITCO%20HORIZ%20FULL%20(1).png" width="300">
     <h1>Insurance Document Extractor</h1>
