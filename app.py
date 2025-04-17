@@ -16,17 +16,12 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 KITCO_BLUE = (33, 135, 132)
 KITCO_GREEN = (61, 153, 93)
 KITCO_GOLD = (191, 127, 43)
-KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"  # Ensure this is uploaded with your app
+KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"  # Ensure this file is in your directory
 
-# Function to extract text from PDF
 def extract_text_from_pdf(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
-        text = ""
-        for page in pdf.pages:
-            text += page.extract_text() + "\n"
-    return text
+        return "\n".join(page.extract_text() or "" for page in pdf.pages)
 
-# Function to call OpenAI and extract data
 def extract_fields_from_text(text):
     prompt = f"""
 Extract the following details from this insurance document:
@@ -90,7 +85,6 @@ Exclusions Summary: ...
     )
     return response.choices[0].message.content
 
-# Function to parse GPT response to dictionary and calculate rate
 def parse_output_to_dict(text_output):
     data = {}
     for line in text_output.strip().split("\n"):
@@ -111,7 +105,6 @@ def parse_output_to_dict(text_output):
 
     return data
 
-# Function to create PDF summary
 class SummaryPDF(FPDF):
     def header(self):
         if os.path.exists(KITCO_LOGO_PATH):
@@ -120,39 +113,39 @@ class SummaryPDF(FPDF):
         self.set_text_color(*KITCO_BLUE)
         self.ln(20)
         self.cell(0, 10, "Insurance Summary", ln=True, align="C")
-        self.ln(10)
+        self.ln(6)
 
     def add_data_section(self, title, fields, data):
         self.set_text_color(*KITCO_GREEN)
         self.set_font("Helvetica", "B", 12)
-        self.cell(0, 10, title, ln=True)
+        self.cell(0, 8, title, ln=True)
         self.set_font("Helvetica", size=11)
         for field in fields:
             value = data.get(field, "N/A")
             self.set_text_color(*KITCO_BLUE)
             self.cell(60, 6, f"{field}:", ln=False)
             self.set_text_color(0, 0, 0)
-            self.multi_cell(0, 6, f"{value}", align="L")
+            self.cell(0, 6, value, ln=True)
 
     def add_bullet_section(self, title, content):
         self.set_text_color(*KITCO_GREEN)
         self.set_font("Helvetica", "B", 12)
-        self.cell(0, 10, title, ln=True)
+        self.cell(0, 8, title, ln=True)
         self.set_text_color(0, 0, 0)
         self.set_font("Helvetica", size=8)
-        for line in content.split("\n"):
-            for bullet in line.split(" - "):
+        lines = content.split("\n")
+        for line in lines:
+            bullets = line.split(" - ") if " - " in line else [line]
+            for bullet in bullets:
                 if bullet.strip():
                     self.cell(5)
-                    self.multi_cell(0, 5, f"• {bullet.strip()}", align="L")
+                    self.multi_cell(0, 4, f"• {bullet.strip()}", align="L")
 
-# Generate PDF summary
 def generate_pdf_summary(data, filename):
     pdf = SummaryPDF()
     pdf.add_page()
     pdf.add_data_section("Insured Details", [
-        "Insured Name", "Named Insured Type", "Mailing Address", "Property Address",
-        "Underwriting Contact Email"
+        "Insured Name", "Named Insured Type", "Mailing Address", "Property Address", "Underwriting Contact Email"
     ], data)
     pdf.add_data_section("Coverage Dates and Values", [
         "Effective Date", "Expiration Date", "Premium", "Taxes", "Fees", "Total Insured Value", "Rate"
@@ -161,14 +154,12 @@ def generate_pdf_summary(data, filename):
         "Policy Number", "Coverage Type", "Carrier Name", "Broker Name"
     ], data)
     pdf.add_data_section("Deductibles", [
-        "Wind Deductible", "Hail Deductible", "Named Storm Deductible",
-        "All Other Perils Deductible", "Deductible Notes"
+        "Wind Deductible", "Hail Deductible", "Named Storm Deductible", "All Other Perils Deductible", "Deductible Notes"
     ], data)
     pdf.add_bullet_section("Endorsements Summary", data.get("Endorsements Summary", "N/A"))
     pdf.add_bullet_section("Exclusions Summary", data.get("Exclusions Summary", "N/A"))
     pdf.output(filename)
 
-# Merge summary and uploaded PDF
 def merge_pdfs(summary_path, original_path, output_path):
     merger = PdfMerger()
     merger.append(summary_path)
@@ -179,7 +170,7 @@ def merge_pdfs(summary_path, original_path, output_path):
     merger.write(output_path)
     merger.close()
 
-# Streamlit app
+# Streamlit App
 st.set_page_config(page_title="Insurance PDF Extractor")
 st.title("📄 Insurance Document Extractor")
 
