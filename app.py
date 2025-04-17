@@ -4,31 +4,29 @@ import pandas as pd
 import os
 from dotenv import load_dotenv
 import openai
+from openai import OpenAI
 from fpdf import FPDF
 import tempfile
 from PyPDF2 import PdfMerger
 
 # Load API key from .env
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 KITCO_BLUE = (33, 135, 132)
 KITCO_GREEN = (61, 153, 93)
 KITCO_GOLD = (191, 127, 43)
-KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"  # Ensure this is uploaded with your app
+KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"
 
-# Function to extract text from PDF
+# Extract PDF text
 def extract_text_from_pdf(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
-        text = ""
-        for page in pdf.pages:
-            text += page.extract_text() + "\n"
-    return text
+        return "\n".join(page.extract_text() or "" for page in pdf.pages)
 
-# Function to call OpenAI and extract data
+# Extract fields using OpenAI ChatCompletion (new SDK style)
 def extract_fields_from_text(text):
     prompt = f"""
-You are a commercial insurance expert reviewing a property insurance quote. Carefully extract the following data points from the text below. If a value is not clearly stated, return "N/A". If the value is embedded in a sentence, still return it. Include content in parentheses (e.g., "plus applicable premium tax").
+You are a commercial insurance expert reviewing a property insurance quote. Carefully extract the following data points from the text below. If a value is not clearly stated, return "N/A". Include content in parentheses.
 
 Extract and return the following fields:
 - Insured Name
@@ -42,7 +40,7 @@ Extract and return the following fields:
 - Fees
 - Total Insured Value
 - Policy Number
-- Coverage Type (e.g. Property, Liability, Umbrella)
+- Coverage Type
 - Carrier Name
 - Broker Name
 - Underwriting Contact Email
@@ -51,50 +49,27 @@ Extract and return the following fields:
 - Named Storm Deductible
 - All Other Perils Deductible
 - Deductible Notes
-- Endorsements Summary (bullet list format)
-- Exclusions Summary (bullet list format)
+- Endorsements Summary (bullets)
+- Exclusions Summary (bullets)
 
-📌 Notes for accurate extraction:
-- Premium, Taxes, and Fees may be on a different page. Return the number even if it says “plus applicable premium tax.”
-- Policy Number may appear in a section with named insured or coverage details.
-- Values may appear in a summary table, sentence, or paragraph.
-
-Use this format exactly (each on its own line):
+Format exactly like this (one per line):
 Insured Name: ...
-Named Insured Type: ...
-Mailing Address: ...
-Property Address: ...
-Effective Date: ...
-Expiration Date: ...
-Premium: ...
-Taxes: ...
-Fees: ...
-Total Insured Value: ...
-Policy Number: ...
-Coverage Type: ...
-Carrier Name: ...
-Broker Name: ...
-Underwriting Contact Email: ...
-Wind Deductible: ...
-Hail Deductible: ...
-Named Storm Deductible: ...
-All Other Perils Deductible: ...
-Deductible Notes: ...
-Endorsements Summary: ...
+...
 Exclusions Summary: ...
 
 --- DOCUMENT START ---
 {text[:7000]}
 --- DOCUMENT END ---
 """
-    response = openai.ChatCompletion.create(
+
+    response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
         temperature=0
     )
     return response.choices[0].message.content
 
-# Function to parse GPT response to dictionary and calculate rate
+# Parse GPT output to dictionary
 def parse_output_to_dict(text_output):
     data = {}
     for line in text_output.strip().split("\n"):
@@ -105,17 +80,13 @@ def parse_output_to_dict(text_output):
     try:
         premium = float(data.get("Premium", "0").replace("$", "").replace(",", ""))
         tiv = float(data.get("Total Insured Value", "0").replace("$", "").replace(",", ""))
-        if tiv > 0:
-            rate = round((premium / tiv) * 100, 3)
-            data["Rate"] = f"${rate:.3f}"
-        else:
-            data["Rate"] = "N/A"
+        data["Rate"] = f"${(premium / tiv * 100):.3f}" if tiv else "N/A"
     except:
         data["Rate"] = "N/A"
 
     return data
 
-# Function to create PDF summary
+# Custom PDF Summary Template
 class SummaryPDF(FPDF):
     def header(self):
         if os.path.exists(KITCO_LOGO_PATH):
@@ -132,11 +103,10 @@ class SummaryPDF(FPDF):
         self.cell(0, 10, title, ln=True)
         self.set_font("Helvetica", size=11)
         for field in fields:
-            value = data.get(field, "N/A")
             self.set_text_color(*KITCO_BLUE)
             self.cell(60, 6, f"{field}:", ln=False)
             self.set_text_color(0, 0, 0)
-            self.multi_cell(0, 6, f"{value}", align="L")
+            self.multi_cell(0, 6, data.get(field, "N/A"), align="L")
 
     def add_bullet_section(self, title, content):
         self.set_text_color(*KITCO_GREEN)
@@ -150,7 +120,7 @@ class SummaryPDF(FPDF):
                     self.cell(5)
                     self.multi_cell(0, 5, f"• {bullet.strip()}", align="L")
 
-# Generate PDF summary
+# Create summary PDF
 def generate_pdf_summary(data, filename):
     pdf = SummaryPDF()
     pdf.add_page()
@@ -159,7 +129,8 @@ def generate_pdf_summary(data, filename):
         "Underwriting Contact Email"
     ], data)
     pdf.add_data_section("Coverage Dates and Values", [
-        "Effective Date", "Expiration Date", "Premium", "Taxes", "Fees", "Total Insured Value", "Rate"
+        "Effective Date", "Expiration Date", "Premium", "Taxes", "Fees",
+        "Total Insured Value", "Rate"
     ], data)
     pdf.add_data_section("Policy Info", [
         "Policy Number", "Coverage Type", "Carrier Name", "Broker Name"
@@ -172,7 +143,7 @@ def generate_pdf_summary(data, filename):
     pdf.add_bullet_section("Exclusions Summary", data.get("Exclusions Summary", "N/A"))
     pdf.output(filename)
 
-# Merge summary and uploaded PDF
+# Merge summary PDF with uploaded file
 def merge_pdfs(summary_path, original_path, output_path):
     merger = PdfMerger()
     merger.append(summary_path)
@@ -183,7 +154,7 @@ def merge_pdfs(summary_path, original_path, output_path):
     merger.write(output_path)
     merger.close()
 
-# Streamlit app
+# Streamlit UI
 st.set_page_config(page_title="Insurance PDF Extractor")
 st.title("📄 Insurance Document Extractor")
 
@@ -211,7 +182,7 @@ if uploaded_file is not None:
             merge_pdfs(temp_summary.name, temp_uploaded_path, temp_merged.name)
             with open(temp_merged.name, "rb") as f:
                 st.download_button(
-                    label="📅 Download Merged PDF Report",
+                    label="📥 Download Full PDF Report",
                     data=f.read(),
                     file_name="insurance_summary.pdf",
                     mime="application/pdf"
