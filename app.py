@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from fpdf import FPDF
 import tempfile
+from PyPDF2 import PdfMerger
 
 # Load API key from .env
 load_dotenv()
@@ -127,7 +128,7 @@ def parse_output_to_dict(text_output):
     return data
 
 
-def generate_pdf_summary(data, filename):
+def generate_pdf_summary(data, summary_path):
     def safe_text(text):
         return text.encode("latin-1", "replace").decode("latin-1")
 
@@ -154,7 +155,15 @@ def generate_pdf_summary(data, filename):
         pdf.multi_cell(0, 8, txt=safe_text(value), align="L")
         pdf.ln(1)
 
-    pdf.output(filename)
+    pdf.output(summary_path)
+
+
+def merge_pdfs(summary_path, original_path, output_path):
+    merger = PdfMerger()
+    merger.append(summary_path)
+    merger.append(original_path)
+    merger.write(output_path)
+    merger.close()
 
 
 # Streamlit UI
@@ -183,12 +192,20 @@ if uploaded_file is not None:
         mime="text/csv"
     )
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
-        generate_pdf_summary(data_dict, temp_pdf.name)
-        with open(temp_pdf.name, "rb") as f:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_summary, \
+         tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_merged:
+
+        generate_pdf_summary(data_dict, temp_summary.name)
+        temp_uploaded_path = os.path.join(tempfile.gettempdir(), uploaded_file.name)
+        with open(temp_uploaded_path, "wb") as f:
+            f.write(uploaded_file.read())
+
+        merge_pdfs(temp_summary.name, temp_uploaded_path, temp_merged.name)
+
+        with open(temp_merged.name, "rb") as f:
             st.download_button(
-                label="📄 Download Summary PDF",
+                label="📄 Download Full PDF (Summary + Original)",
                 data=f.read(),
-                file_name="extracted_summary.pdf",
+                file_name="full_summary_and_original.pdf",
                 mime="application/pdf"
             )
