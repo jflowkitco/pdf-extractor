@@ -11,6 +11,13 @@ import tempfile
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+KITCO_BLUE = (33, 135, 132)
+KITCO_GREEN = (61, 153, 93)
+KITCO_GOLD = (191, 127, 43)
+
+KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"  # Ensure this is uploaded with your app
+
+
 def extract_text_from_pdf(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
         text = ""
@@ -19,6 +26,7 @@ def extract_text_from_pdf(pdf_file):
             if page_text:
                 text += page_text + "\n"
         return text
+
 
 def extract_fields_from_text(text):
     prompt = f"""
@@ -92,6 +100,7 @@ Exclusions Summary: ...
     )
     return response.choices[0].message.content
 
+
 def parse_output_to_dict(text_output):
     expected_fields = [
         "Insured Name", "Named Insured Type", "Mailing Address", "Property Address",
@@ -117,22 +126,36 @@ def parse_output_to_dict(text_output):
             data[current_field] += "\n" + line.strip()
     return data
 
+
 def generate_pdf_summary(data, filename):
     def safe_text(text):
         return text.encode("latin-1", "replace").decode("latin-1")
 
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
+
+    if os.path.exists(KITCO_LOGO_PATH):
+        pdf.image(KITCO_LOGO_PATH, x=10, y=8, w=50)
+        pdf.set_y(30)
+
+    pdf.set_font("Times", "B", 16)
+    pdf.set_text_color(*KITCO_BLUE)
     pdf.cell(200, 10, txt=safe_text("Insurance Document Summary"), ln=True, align="C")
     pdf.ln(10)
 
-    pdf.set_font("Arial", size=12)
+    pdf.set_font("Times", size=12)
+    pdf.set_text_color(0, 0, 0)
     for key, value in data.items():
-        pdf.multi_cell(0, 10, txt=safe_text(f"{key}: {value}"), align="L")
+        pdf.set_font("Times", "B", 12)
+        pdf.set_text_color(*KITCO_GREEN)
+        pdf.multi_cell(0, 8, txt=safe_text(f"{key}"), align="L")
+        pdf.set_font("Times", size=12)
+        pdf.set_text_color(0, 0, 0)
+        pdf.multi_cell(0, 8, txt=safe_text(value), align="L")
         pdf.ln(1)
 
     pdf.output(filename)
+
 
 # Streamlit UI
 st.set_page_config(page_title="Insurance PDF Extractor")
