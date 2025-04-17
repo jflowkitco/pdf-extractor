@@ -47,7 +47,15 @@ Your job is to extract and infer the following fields from the insurance documen
 - Named Storm Deductible
 - All Other Perils Deductible
 
-Use wording patterns like:
+Also include a plain-language summary of any deductible info found in the document. Mention:
+- If deductibles were listed clearly
+- What kind of language was used
+- If anything was assumed or unclear
+
+Return that summary in a field labeled:  
+**Deductible Notes**
+
+Use these example patterns to recognize deductible types:
 
 - “Wind/hail deductible: 2% subject to $50,000 min”
 - “Named storm deductible: 5%”
@@ -55,10 +63,9 @@ Use wording patterns like:
 - “Deductible: $25,000” → assume AOP unless otherwise stated
 
 If only one deductible is listed, assign it to “All Other Perils.”
-If multiple are listed in different sections, match best based on context.
-If truly unavailable, return “N/A”.
+If truly unavailable, return "N/A".
 
-**Return the data exactly like this:**
+Return the results exactly like this:
 
 Insured Name: ...
 Named Insured Type: ...
@@ -79,6 +86,7 @@ Wind Deductible: ...
 Hail Deductible: ...
 Named Storm Deductible: ...
 All Other Perils Deductible: ...
+Deductible Notes: ...
 
 --- DOCUMENT START ---
 {text[:6000]}
@@ -111,7 +119,8 @@ def parse_output_to_dict(text_output):
         "Wind Deductible",
         "Hail Deductible",
         "Named Storm Deductible",
-        "All Other Perils Deductible"
+        "All Other Perils Deductible",
+        "Deductible Notes"
     ]
 
     data = {field: "N/A" for field in expected_fields}
