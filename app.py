@@ -121,7 +121,7 @@ def parse_output_to_dict(text_output):
                 current_field = key
                 data[current_field] = value
         elif current_field:
-            data[current_field] += "\n" + line.strip()
+            data[current_field] += " " + line.strip()
 
     # Add rate calculation if Premium and Total Insured Value are present
     try:
@@ -170,12 +170,9 @@ def generate_pdf_summary(data, summary_path):
 
         for key in keys:
             value = data.get(key, "N/A")
-            pdf.set_font("Times", "B", 12)
-            pdf.set_text_color(*KITCO_GREEN)
-            pdf.multi_cell(0, 8, txt=safe_text(f"{key}"), align="L")
             pdf.set_font("Times", size=12)
             pdf.set_text_color(0, 0, 0)
-            pdf.multi_cell(0, 8, txt=safe_text(value), align="L")
+            pdf.multi_cell(0, 8, txt=safe_text(f"{key}: {value}"), align="L")
             pdf.ln(1)
         pdf.ln(2)
 
