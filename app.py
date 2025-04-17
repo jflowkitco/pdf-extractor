@@ -52,14 +52,9 @@ Separate into two fields:
 - Endorsements Summary
 - Exclusions Summary
 
-Look for section titles or phrases like:
-- "Forms and Endorsements"
-- "This policy excludes…"
-- "The following is added to…"
+If any fields are not present, return "N/A". For the summaries, return "N/A" if no content is found.
 
-If any fields are not present, return "N/A".
-
-**Return the data in this exact format:**
+Return the data in this exact format with readable wrapping and line breaks for summaries:
 Insured Name: ...
 Named Insured Type: ...
 Mailing Address: ...
@@ -96,68 +91,31 @@ Exclusions Summary: ...
 
 def parse_output_to_dict(text_output):
     expected_fields = [
-        "Insured Name",
-        "Named Insured Type",
-        "Mailing Address",
-        "Property Address",
-        "Effective Date",
-        "Expiration Date",
-        "Premium",
-        "Taxes",
-        "Fees",
-        "Total Insured Value",
-        "Policy Number",
-        "Coverage Type",
-        "Carrier Name",
-        "Broker Name",
-        "Underwriting Contact Email",
-        "Wind Deductible",
-        "Hail Deductible",
-        "Named Storm Deductible",
-        "All Other Perils Deductible",
-        "Deductible Notes",
-        "Endorsements Summary",
-        "Exclusions Summary"
+        "Insured Name", "Named Insured Type", "Mailing Address", "Property Address",
+        "Effective Date", "Expiration Date", "Premium", "Taxes", "Fees",
+        "Total Insured Value", "Policy Number", "Coverage Type", "Carrier Name",
+        "Broker Name", "Underwriting Contact Email", "Wind Deductible", "Hail Deductible",
+        "Named Storm Deductible", "All Other Perils Deductible", "Deductible Notes",
+        "Endorsements Summary", "Exclusions Summary"
     ]
 
     data = {field: "N/A" for field in expected_fields}
-
-    cleaned = re.sub(r"[\*\n]+", " ", text_output)
-    lines = cleaned.strip().split("\n")
-
-    for line in lines:
-        if ":" in line:
-            key, value = line.split(":", 1)
-            key = key.strip()
-            value = value.strip()
-            if key in data:
-                data[key] = value if value else "N/A"
-
+    cleaned = re.sub(r"\*+", "", text_output).replace("\n", " ")
+    for field in expected_fields:
+        pattern = re.compile(rf"{re.escape(field)}: (.*?) (?={ '|'.join(map(re.escape, expected_fields)) }:|$)", re.IGNORECASE)
+        match = pattern.search(cleaned)
+        if match:
+            data[field] = match.group(1).strip()
     return data
 
 # Streamlit UI
 st.set_page_config(page_title="Insurance PDF Extractor", layout="wide")
 st.markdown("""
     <style>
-        .reportview-container .main {{
-            background-color: #F9FAFB;
-            padding: 2rem;
-        }}
-        h1 {{
-            color: #3A699A;
-        }}
-        .stButton>button {{
-            background-color: #218784;
-            color: white;
-            border-radius: 10px;
-            padding: 0.5em 1em;
-        }}
-        .stDownloadButton>button {{
-            background-color: #BF7F2B;
-            color: white;
-            border-radius: 10px;
-            padding: 0.5em 1em;
-        }}
+        .reportview-container .main {{ background-color: #F9FAFB; padding: 2rem; }}
+        h1 {{ color: #3A699A; }}
+        .stButton>button {{ background-color: #218784; color: white; border-radius: 10px; padding: 0.5em 1em; }}
+        .stDownloadButton>button {{ background-color: #BF7F2B; color: white; border-radius: 10px; padding: 0.5em 1em; }}
     </style>
     <img src="https://raw.githubusercontent.com/jflowkitco/pdf-extractor/main/KITCO%20HORIZ%20FULL%20(1).png" width="300">
     <h1>Insurance Document Extractor</h1>
@@ -173,33 +131,15 @@ if uploaded_file is not None:
     fields_output = extract_fields_from_text(text)
     data_dict = parse_output_to_dict(fields_output)
 
-    st.subheader("\U0001F4DD Summary")
+    st.subheader("📝 Summary")
+    for key, value in data_dict.items():
+        if key not in ["Endorsements Summary", "Exclusions Summary"]:
+            st.markdown(f"**{key}:** {value}")
+
+    st.markdown("---")
     st.markdown(f"""
-    **Insured Name:** {data_dict['Insured Name']}  
-    **Named Insured Type:** {data_dict['Named Insured Type']}  
-    **Mailing Address:** {data_dict['Mailing Address']}  
-    **Property Address:** {data_dict['Property Address']}  
-    **Effective Date:** {data_dict['Effective Date']}  
-    **Expiration Date:** {data_dict['Expiration Date']}  
-    **Premium:** {data_dict['Premium']}  
-    **Taxes:** {data_dict['Taxes']}  
-    **Fees:** {data_dict['Fees']}  
-    **Total Insured Value:** {data_dict['Total Insured Value']}  
-    **Policy Number:** {data_dict['Policy Number']}  
-    **Coverage Type:** {data_dict['Coverage Type']}  
-    **Carrier Name:** {data_dict['Carrier Name']}  
-    **Broker Name:** {data_dict['Broker Name']}  
-    **Underwriting Contact Email:** {data_dict['Underwriting Contact Email']}  
-
-    **Wind Deductible:** {data_dict['Wind Deductible']}  
-    **Hail Deductible:** {data_dict['Hail Deductible']}  
-    **Named Storm Deductible:** {data_dict['Named Storm Deductible']}  
-    **All Other Perils Deductible:** {data_dict['All Other Perils Deductible']}  
-    **Deductible Notes:** {data_dict['Deductible Notes']}  
-
-    ---
     **Endorsements Summary**  
-    {data_dict['Endorsements Summary']}
+    {data_dict['Endorsements Summary']}  
 
     **Exclusions Summary**  
     {data_dict['Exclusions Summary']}
@@ -207,7 +147,7 @@ if uploaded_file is not None:
 
     csv = pd.DataFrame([data_dict]).to_csv(index=False).encode("utf-8")
     st.download_button(
-        label="\U0001F4E5 Download CSV",
+        label="📥 Download CSV",
         data=csv,
         file_name="extracted_data.csv",
         mime="text/csv"
