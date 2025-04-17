@@ -20,27 +20,46 @@ def extract_text_from_pdf(pdf_file):
 def extract_fields_from_text(text):
     prompt = f"""
     Extract the following details from this insurance document:
+    def extract_fields_from_text(text):
+    prompt = f"""
+Extract the following details from this insurance document:
+
     - Insured Name
+    - Named Insured Type (e.g. LLC, Trust, Individual)
+    - Mailing Address
+    - Property Address
     - Effective Date
+    - Expiration Date
     - Premium
     - Taxes
     - Fees
+    - Total Insured Value
     - Policy Number
+    - Coverage Type (e.g. Special, Basic, Fire Only)
     - Carrier Name
     - Broker Name
+    - Underwriting Contact Email
 
-    Return the results in this format:
+Please return them in this format exactly:
+
     Insured Name: ...
+    Named Insured Type: ...
+    Mailing Address: ...
+    Property Address: ...
     Effective Date: ...
+    Expiration Date: ...
     Premium: ...
     Taxes: ...
     Fees: ...
+    Total Insured Value: ...
     Policy Number: ...
+    Coverage Type: ...
     Carrier Name: ...
     Broker Name: ...
+    Underwriting Contact Email: ...
 
-    --- DOCUMENT START ---
-    {text[:6000]}
+--- DOCUMENT START ---
+{text[:6000
     --- DOCUMENT END ---
     """
 
