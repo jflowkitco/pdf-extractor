@@ -15,53 +15,51 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 KITCO_BLUE = (33, 135, 132)
 KITCO_GREEN = (61, 153, 93)
 KITCO_GOLD = (191, 127, 43)
-KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"
+KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"  # Ensure this is uploaded with your app
 
+# Function to extract text from PDF
 def extract_text_from_pdf(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
         text = ""
         for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
+            text += page.extract_text() + "\n"
     return text
 
+# Function to call OpenAI and extract data
 def extract_fields_from_text(text):
     prompt = f"""
-You are reviewing a commercial property insurance quote. Extract the following details. These fields may appear in different formats or sections such as invoices, summary pages, declarations, or endorsement listings. Be accurate and thorough.
+You are a commercial insurance expert reviewing a property insurance quote. Carefully extract the following data points from the text below. If a value is not clearly stated, return "N/A". If the value is embedded in a sentence, still return it. Include content in parentheses (e.g., "plus applicable premium tax").
 
-Required Fields:
+Extract and return the following fields:
 - Insured Name
 - Named Insured Type
 - Mailing Address
 - Property Address
 - Effective Date
 - Expiration Date
-- Premium (include anything in parentheses like "plus applicable premium tax")
+- Premium
 - Taxes
 - Fees
 - Total Insured Value
-- Policy Number (look near insured name or coverage details)
+- Policy Number
 - Coverage Type (e.g. Property, Liability, Umbrella)
 - Carrier Name
 - Broker Name
 - Underwriting Contact Email
-
-Deductibles:
 - Wind Deductible
 - Hail Deductible
 - Named Storm Deductible
 - All Other Perils Deductible
 - Deductible Notes
+- Endorsements Summary (bullet list format)
+- Exclusions Summary (bullet list format)
 
-Endorsements Summary:
-Return as a bulleted list (e.g., "- Total Loss Endorsement, - Virus/Bacteria Exclusion")
+📌 Notes for accurate extraction:
+- Premium, Taxes, and Fees may be on a different page. Return the number even if it says “plus applicable premium tax.”
+- Policy Number may appear in a section with named insured or coverage details.
+- Values may appear in a summary table, sentence, or paragraph.
 
-Exclusions Summary:
-Return as a bulleted list (e.g., "- Flood, - EQSL")
-
-Return this format exactly:
-
+Use this format exactly (each on its own line):
 Insured Name: ...
 Named Insured Type: ...
 Mailing Address: ...
@@ -84,13 +82,11 @@ All Other Perils Deductible: ...
 Deductible Notes: ...
 Endorsements Summary:
 - ...
-- ...
 Exclusions Summary:
-- ...
 - ...
 
 --- DOCUMENT START ---
-{text[:15000]}
+{text[:7000]}
 --- DOCUMENT END ---
 """
     response = client.chat.completions.create(
@@ -100,18 +96,16 @@ Exclusions Summary:
     )
     return response.choices[0].message.content
 
+# Function to parse GPT response to dictionary and calculate rate
 def parse_output_to_dict(text_output):
     data = {}
     for line in text_output.strip().split("\n"):
-        if ":" in line and not line.startswith("-"):
+        if ":" in line:
             key, value = line.split(":", 1)
             data[key.strip()] = value.strip()
-        elif line.startswith("-"):
-            last_key = list(data.keys())[-1]
-            data[last_key] += f"\n{line.strip()}"
 
     try:
-        premium = float(data.get("Premium", "0").replace("$", "").replace(",", "").split()[0])
+        premium = float(data.get("Premium", "0").replace("$", "").replace(",", ""))
         tiv = float(data.get("Total Insured Value", "0").replace("$", "").replace(",", ""))
         if tiv > 0:
             rate = round((premium / tiv) * 100, 3)
@@ -123,6 +117,7 @@ def parse_output_to_dict(text_output):
 
     return data
 
+# Function to create PDF summary
 class SummaryPDF(FPDF):
     def header(self):
         if os.path.exists(KITCO_LOGO_PATH):
@@ -143,7 +138,7 @@ class SummaryPDF(FPDF):
             self.set_text_color(*KITCO_BLUE)
             self.cell(60, 6, f"{field}:", ln=False)
             self.set_text_color(0, 0, 0)
-            self.multi_cell(0, 6, value, align="L")
+            self.multi_cell(0, 6, f"{value}", align="L")
 
     def add_bullet_section(self, title, content):
         self.set_text_color(*KITCO_GREEN)
@@ -152,11 +147,12 @@ class SummaryPDF(FPDF):
         self.set_text_color(0, 0, 0)
         self.set_font("Helvetica", size=8)
         for line in content.split("\n"):
-            line = line.strip(" -•")
-            if line:
-                self.cell(5)
-                self.multi_cell(0, 5, f"• {line.strip()}", align="L")
+            for bullet in line.split(" - "):
+                if bullet.strip():
+                    self.cell(5)
+                    self.multi_cell(0, 5, f"• {bullet.strip()}", align="L")
 
+# Generate PDF summary
 def generate_pdf_summary(data, filename):
     pdf = SummaryPDF()
     pdf.add_page()
@@ -176,8 +172,9 @@ def generate_pdf_summary(data, filename):
     ], data)
     pdf.add_bullet_section("Endorsements Summary", data.get("Endorsements Summary", "N/A"))
     pdf.add_bullet_section("Exclusions Summary", data.get("Exclusions Summary", "N/A"))
-    pdf.output(filename)
+    pdf.output(filename, "F")
 
+# Merge summary and uploaded PDF
 def merge_pdfs(summary_path, original_path, output_path):
     merger = PdfMerger()
     merger.append(summary_path)
@@ -188,6 +185,7 @@ def merge_pdfs(summary_path, original_path, output_path):
     merger.write(output_path)
     merger.close()
 
+# Streamlit app
 st.set_page_config(page_title="Insurance PDF Extractor")
 st.title("📄 Insurance Document Extractor")
 
@@ -200,8 +198,8 @@ if uploaded_file is not None:
         temp_uploaded_path = temp_uploaded.name
 
     text = extract_text_from_pdf(temp_uploaded_path)
-    st.success("Sending to GPT...")
 
+    st.success("Sending to GPT...")
     fields_output = extract_fields_from_text(text)
     st.code(fields_output)
 
