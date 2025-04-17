@@ -193,12 +193,12 @@ if uploaded_file is not None:
     )
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_summary, \
-         tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_merged:
+         tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_merged, \
+         tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_uploaded:
 
         generate_pdf_summary(data_dict, temp_summary.name)
-        temp_uploaded_path = os.path.join(tempfile.gettempdir(), uploaded_file.name)
-        with open(temp_uploaded_path, "wb") as f:
-            f.write(uploaded_file.read())
+        temp_uploaded.write(uploaded_file.getbuffer())
+        temp_uploaded_path = temp_uploaded.name
 
         merge_pdfs(temp_summary.name, temp_uploaded_path, temp_merged.name)
 
