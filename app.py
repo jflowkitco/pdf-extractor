@@ -29,7 +29,7 @@ def extract_text_from_pdf(pdf_file):
 # Function to call OpenAI and extract data
 def extract_fields_from_text(text):
     prompt = f"""
-You are a commercial insurance expert reviewing a property insurance quote. Carefully extract the following data points from the text below. If a value is not clearly stated, return "N/A". When values are described in parentheses or with conditions (e.g., "plus applicable premium tax"), include that in the response.
+You are a commercial insurance expert reviewing a property insurance quote. Carefully extract the following data points from the text below. If a value is not clearly stated, return "N/A". If the value is embedded in a sentence, still return it. Include content in parentheses (e.g., "plus applicable premium tax").
 
 Extract and return the following fields:
 - Insured Name
@@ -55,7 +55,12 @@ Extract and return the following fields:
 - Endorsements Summary (bullet list format)
 - Exclusions Summary (bullet list format)
 
-Format the response exactly like this (each on its own line):
+📌 Notes for accurate extraction:
+- Premium, Taxes, and Fees may be on a different page. Return the number even if it says “plus applicable premium tax.”
+- Policy Number may appear in a section with named insured or coverage details.
+- Values may appear in a summary table, sentence, or paragraph.
+
+Use this format exactly (each on its own line):
 Insured Name: ...
 Named Insured Type: ...
 Mailing Address: ...
@@ -207,7 +212,7 @@ if uploaded_file is not None:
             merge_pdfs(temp_summary.name, temp_uploaded_path, temp_merged.name)
             with open(temp_merged.name, "rb") as f:
                 st.download_button(
-                    label="📥 Download Merged PDF Report",
+                    label="📅 Download Merged PDF Report",
                     data=f.read(),
                     file_name="insurance_summary.pdf",
                     mime="application/pdf"
