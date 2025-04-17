@@ -4,6 +4,7 @@ import pandas as pd
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
+import re
 
 # Load API key from .env
 load_dotenv()
@@ -16,43 +17,61 @@ def extract_text_from_pdf(pdf_file):
             page_text = page.extract_text()
             if page_text:
                 text += page_text + "\n"
-    return text
+        return text
+
+def chunk_text(text, max_chars=6000):
+    chunks = []
+    while len(text) > max_chars:
+        split_index = text[:max_chars].rfind("\n")
+        if split_index == -1:
+            split_index = max_chars
+        chunks.append(text[:split_index])
+        text = text[split_index:]
+    chunks.append(text)
+    return chunks
 
 def extract_fields_from_text(text):
-    prompt = f"""
-You are an expert insurance document parser. Extract the following fields using contextual understanding. 
-The information may appear anywhere in the document and may be phrased differently. Match and infer best-fit values.
+    chunks = chunk_text(text)
+    combined_response = ""
+
+    for i, chunk in enumerate(chunks):
+        prompt = f"""
+You are an insurance policy analysis bot.
+
+Your job is to extract and infer the following fields from the insurance document below. Use context and examples to identify data even when labels are inconsistent.
 
 **Fields to extract:**
 - Insured Name
-- Named Insured Type (LLC, Trust, Individual)
+- Named Insured Type (e.g. LLC, Trust, Individual)
 - Mailing Address
 - Property Address
 - Effective Date
 - Expiration Date
-- Premium (total premium amount)
-- Taxes (any applicable premium tax or breakdown)
-- Fees (any policy fees)
+- Premium
+- Taxes
+- Fees
 - Total Insured Value
 - Policy Number
-- Coverage Type (Property, Liability, Umbrella, etc.)
+- Coverage Type (e.g. Property, Liability, Umbrella)
 - Carrier Name
 - Broker Name
 - Underwriting Contact Email
 
-**Deductibles to infer:**
+**Deductibles to infer (even if not explicitly labeled):**
 - Wind Deductible
 - Hail Deductible
 - Named Storm Deductible
 - All Other Perils Deductible
-- Deductible Notes (explain any related language)
+- Deductible Notes (brief summary of any deductible-related language or assumptions)
 
-**Summaries:**
+**Endorsement & Exclusion Summary:**
+Separate into two fields:
 - Endorsements Summary
 - Exclusions Summary
 
-Return values exactly in this format:
+If any fields are not present, return "N/A". For the summaries, return "N/A" if no content is found.
 
+Return the data in this exact format with readable wrapping and line breaks for summaries:
 Insured Name: ...
 Named Insured Type: ...
 Mailing Address: ...
@@ -77,15 +96,17 @@ Endorsements Summary: ...
 Exclusions Summary: ...
 
 --- DOCUMENT START ---
-{text[:6000]}
+{chunk}
 --- DOCUMENT END ---
 """
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0
-    )
-    return response.choices[0].message.content
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+        combined_response += response.choices[0].message.content + "\n"
+
+    return combined_response
 
 def parse_output_to_dict(text_output):
     expected_fields = [
@@ -116,10 +137,10 @@ def parse_output_to_dict(text_output):
 st.set_page_config(page_title="Insurance PDF Extractor", layout="wide")
 st.markdown("""
     <style>
-        .reportview-container .main { background-color: #F9FAFB; padding: 2rem; }
-        h1 { color: #3A699A; }
-        .stButton>button { background-color: #218784; color: white; border-radius: 10px; padding: 0.5em 1em; }
-        .stDownloadButton>button { background-color: #BF7F2B; color: white; border-radius: 10px; padding: 0.5em 1em; }
+        .reportview-container .main {{ background-color: #F9FAFB; padding: 2rem; }}
+        h1 {{ color: #3A699A; }}
+        .stButton>button {{ background-color: #218784; color: white; border-radius: 10px; padding: 0.5em 1em; }}
+        .stDownloadButton>button {{ background-color: #BF7F2B; color: white; border-radius: 10px; padding: 0.5em 1em; }}
     </style>
     <img src="https://raw.githubusercontent.com/jflowkitco/pdf-extractor/main/KITCO%20HORIZ%20FULL%20(1).png" width="300">
     <h1>Insurance Document Extractor</h1>
