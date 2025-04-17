@@ -18,7 +18,11 @@ def extract_text_from_pdf(pdf_file):
 
 def extract_fields_from_text(text):
     prompt = f"""
-Extract the following details from this insurance document, making your best inference based on context:
+You are an insurance policy analysis bot.
+
+Your job is to extract and infer the following fields from the insurance document below. Use context and examples to identify data even when labels are inconsistent.
+
+**Fields to extract:**
 
 - Insured Name
 - Named Insured Type (e.g. LLC, Trust, Individual)
@@ -36,21 +40,25 @@ Extract the following details from this insurance document, making your best inf
 - Broker Name
 - Underwriting Contact Email
 
-Now infer the deductible amounts or percentages for the following, even if not explicitly labeled:
+**Deductibles to infer (even if not explicitly labeled):**
 
 - Wind Deductible
 - Hail Deductible
 - Named Storm Deductible
 - All Other Perils Deductible
 
-Use the following logic:
-- Look for words like “wind,” “hail,” “named storm,” “AOP,” “all other perils,” or “all other causes of loss.”
-- Deductibles may be listed as flat dollar amounts, percentages, or percentages with minimums (e.g. “2% subject to a $100,000 minimum”).
-- If a deductible is listed in a general section, try to assign it to the most relevant peril type.
-- If only one deductible is listed, assume it applies to “All Other Perils.”
-- If deductible info is unclear or not present, return "N/A".
+Use wording patterns like:
 
-Return the results in this format exactly:
+- “Wind/hail deductible: 2% subject to $50,000 min”
+- “Named storm deductible: 5%”
+- “All other perils: $100,000”
+- “Deductible: $25,000” → assume AOP unless otherwise stated
+
+If only one deductible is listed, assign it to “All Other Perils.”
+If multiple are listed in different sections, match best based on context.
+If truly unavailable, return “N/A”.
+
+**Return the data exactly like this:**
 
 Insured Name: ...
 Named Insured Type: ...
