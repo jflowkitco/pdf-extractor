@@ -4,6 +4,8 @@ import pandas as pd
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
+from fpdf import FPDF
+import tempfile
 
 # Load API key from .env
 load_dotenv()
@@ -115,6 +117,20 @@ def parse_output_to_dict(text_output):
             data[current_field] += "\n" + line.strip()
     return data
 
+def generate_pdf_summary(data, filename):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(200, 10, txt="Insurance Document Summary", ln=True, align="C")
+    pdf.ln(10)
+
+    pdf.set_font("Arial", size=12)
+    for key, value in data.items():
+        pdf.multi_cell(0, 10, txt=f"{key}: {value}", align="L")
+        pdf.ln(1)
+
+    pdf.output(filename)
+
 # Streamlit UI
 st.set_page_config(page_title="Insurance PDF Extractor")
 st.title("📄 Insurance Document Extractor")
@@ -140,3 +156,13 @@ if uploaded_file is not None:
         file_name="extracted_data.csv",
         mime="text/csv"
     )
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
+        generate_pdf_summary(data_dict, temp_pdf.name)
+        with open(temp_pdf.name, "rb") as f:
+            st.download_button(
+                label="📄 Download Summary PDF",
+                data=f.read(),
+                file_name="extracted_summary.pdf",
+                mime="application/pdf"
+            )
