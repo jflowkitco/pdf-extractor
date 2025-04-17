@@ -4,6 +4,7 @@ import pandas as pd
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
+import re
 
 # Load API key from .env
 load_dotenv()
@@ -121,7 +122,11 @@ def parse_output_to_dict(text_output):
 
     data = {field: "N/A" for field in expected_fields}
 
-    for line in text_output.strip().split("\n"):
+    # Pre-clean awkward line breaks and symbols
+    cleaned = re.sub(r"[\*\n]+", " ", text_output)
+    lines = cleaned.strip().split("\n")
+
+    for line in lines:
         if ":" in line:
             key, value = line.split(":", 1)
             key = key.strip()
@@ -162,7 +167,7 @@ if uploaded_file is not None:
     **Carrier Name:** {data_dict['Carrier Name']}  
     **Broker Name:** {data_dict['Broker Name']}  
     **Underwriting Contact Email:** {data_dict['Underwriting Contact Email']}  
-    
+
     **Wind Deductible:** {data_dict['Wind Deductible']}  
     **Hail Deductible:** {data_dict['Hail Deductible']}  
     **Named Storm Deductible:** {data_dict['Named Storm Deductible']}  
