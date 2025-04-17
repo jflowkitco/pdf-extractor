@@ -122,6 +122,18 @@ def parse_output_to_dict(text_output):
                 data[current_field] = value
         elif current_field:
             data[current_field] += "\n" + line.strip()
+
+    # Add rate calculation if Premium and Total Insured Value are present
+    try:
+        premium = float(data["Premium"].replace("$", "").replace(",", ""))
+        tiv = float(data["Total Insured Value"].replace("$", "").replace(",", ""))
+        if tiv > 0:
+            data["Rate"] = f"{(premium / tiv) * 100:.4f}%"
+        else:
+            data["Rate"] = "N/A"
+    except:
+        data["Rate"] = "N/A"
+
     return data
 
 def generate_pdf_summary(data, summary_path):
@@ -130,7 +142,7 @@ def generate_pdf_summary(data, summary_path):
 
     section_headers = {
         "Policy Info": ["Insured Name", "Named Insured Type", "Mailing Address", "Property Address"],
-        "Coverage Dates & Values": ["Effective Date", "Expiration Date", "Premium", "Taxes", "Fees", "Total Insured Value"],
+        "Coverage Dates & Values": ["Effective Date", "Expiration Date", "Premium", "Taxes", "Fees", "Total Insured Value", "Rate"],
         "Policy Details": ["Policy Number", "Coverage Type", "Carrier Name", "Broker Name", "Underwriting Contact Email"],
         "Deductibles": ["Wind Deductible", "Hail Deductible", "Named Storm Deductible", "All Other Perils Deductible", "Deductible Notes"],
         "Endorsements & Exclusions": ["Endorsements Summary", "Exclusions Summary"]
