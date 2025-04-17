@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from fpdf import FPDF
 import tempfile
-from PyPDF2 import PdfMerger
+from PyPDF2 import PdfMerger, PdfReader
 
 # Load API key from .env
 load_dotenv()
@@ -18,7 +18,6 @@ KITCO_GOLD = (191, 127, 43)
 
 KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"  # Ensure this is uploaded with your app
 
-
 def extract_text_by_page(pdf_file):
     page_texts = []
     with pdfplumber.open(pdf_file) as pdf:
@@ -27,7 +26,6 @@ def extract_text_by_page(pdf_file):
             if text:
                 page_texts.append((i + 1, text))
     return page_texts
-
 
 def extract_fields_from_text(text):
     prompt = f"""
@@ -101,7 +99,6 @@ Exclusions Summary: ...
     )
     return response.choices[0].message.content
 
-
 def parse_output_to_dict(text_output):
     expected_fields = [
         "Insured Name", "Named Insured Type", "Mailing Address", "Property Address",
@@ -126,7 +123,6 @@ def parse_output_to_dict(text_output):
         elif current_field:
             data[current_field] += "\n" + line.strip()
     return data
-
 
 def generate_pdf_summary(data, summary_path):
     def safe_text(text):
@@ -157,14 +153,15 @@ def generate_pdf_summary(data, summary_path):
 
     pdf.output(summary_path)
 
-
 def merge_pdfs(summary_path, original_path, output_path):
-    merger = PdfMerger()
-    merger.append(summary_path)
-    merger.append(original_path)
-    merger.write(output_path)
-    merger.close()
-
+    try:
+        merger = PdfMerger()
+        merger.append(summary_path)
+        merger.append(original_path)
+        merger.write(output_path)
+        merger.close()
+    except Exception as e:
+        print("PDF merge failed:", e)
 
 # Streamlit UI
 st.set_page_config(page_title="Insurance PDF Extractor")
