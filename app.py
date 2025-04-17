@@ -100,12 +100,18 @@ def parse_output_to_dict(text_output):
     ]
 
     data = {field: "N/A" for field in expected_fields}
-    cleaned = re.sub(r"\*+", "", text_output).replace("\n", " ")
-    for field in expected_fields:
-        pattern = re.compile(rf"{re.escape(field)}: (.*?) (?={ '|'.join(map(re.escape, expected_fields)) }:|$)", re.IGNORECASE)
-        match = pattern.search(cleaned)
-        if match:
-            data[field] = match.group(1).strip()
+    lines = text_output.strip().splitlines()
+    current_field = None
+    for line in lines:
+        if ":" in line:
+            key_part, value_part = line.split(":", 1)
+            key = key_part.strip()
+            value = value_part.strip()
+            if key in expected_fields:
+                current_field = key
+                data[current_field] = value
+        elif current_field:
+            data[current_field] += "\n" + line.strip()
     return data
 
 # Streamlit UI
