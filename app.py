@@ -1,8 +1,9 @@
 import streamlit as st
 import pdfplumber
-import openai
 import pandas as pd
 import os
+from dotenv import load_dotenv
+from openai import OpenAI
 from dotenv import load_dotenv
 
 # Load .env and set API key
