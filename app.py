@@ -18,41 +18,50 @@ KITCO_GREEN = (61, 153, 93)
 KITCO_GOLD = (191, 127, 43)
 KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"
 
-# Extract text
+# Extract all text from PDF
 def extract_text_from_pdf(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
         return "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
 
-# Prompt to GPT
+# Ask GPT to extract details
 def extract_fields_from_text(text):
     prompt = f"""
-You are an insurance document analyst. Extract these fields:
+You are an insurance document analyst. Extract the following details from the document:
 
-- Insured Name
-- Named Insured Type (e.g. LLC, Trust)
-- Mailing Address
-- Property Address
-- Effective Date
-- Expiration Date
-- Premium (from invoice, look for "Total Premium" or "Premium Due")
-- Taxes (e.g. "Surplus Lines Tax")
+Focus on the invoice section for:
+- Premium (e.g. "Total Premium", "Premium Due")
+- Taxes (e.g. "Surplus Lines Tax", "State Tax")
 - Fees (e.g. "Policy Fee", "Stamping Fee")
-- Total Insured Value
-- Policy Number (look near the top or invoice section)
-- Coverage Type (e.g. Special Causes of Loss, Property, Liability)
-- Carrier Name
-- Broker Name
-- Underwriting Contact Email
-- Wind Deductible
-- Hail Deductible
-- Named Storm Deductible
-- All Other Perils Deductible
-- Deductible Notes
-- Endorsements Summary (as a bulleted list)
-- Exclusions Summary (as a bulleted list)
+- Policy Number (near insured name or in headers)
+
+Return the results exactly like this:
+Insured Name: ...
+Named Insured Type: ...
+Mailing Address: ...
+Property Address: ...
+Effective Date: ...
+Expiration Date: ...
+Premium: ...
+Taxes: ...
+Fees: ...
+Total Insured Value: ...
+Policy Number: ...
+Coverage Type: ...
+Carrier Name: ...
+Broker Name: ...
+Underwriting Contact Email: ...
+Wind Deductible: ...
+Hail Deductible: ...
+Named Storm Deductible: ...
+All Other Perils Deductible: ...
+Deductible Notes: ...
+Endorsements Summary:
+- ...
+Exclusions Summary:
+- ...
 
 --- DOCUMENT START ---
-{text[:9000]}
+{text[:8000]}
 --- DOCUMENT END ---
 """
     response = client.chat.completions.create(
@@ -62,22 +71,18 @@ You are an insurance document analyst. Extract these fields:
     )
     return response.choices[0].message.content
 
-# Parse to dictionary
+# Convert GPT output to dictionary
 def parse_output_to_dict(text_output):
     data = {}
     for line in text_output.strip().split("\n"):
         if ":" in line:
             key, value = line.split(":", 1)
-            value = value.strip()
-            data[key.strip()] = value if value and "not specified" not in value.lower() and "not provided" not in value.lower() else "N/A"
+            data[key.strip()] = value.strip()
 
     try:
-        premium = float(re.sub(r"[^\d.]", "", data.get("Premium", "")))
-        tiv = float(re.sub(r"[^\d.]", "", data.get("Total Insured Value", "")))
-        if tiv > 0:
-            data["Rate"] = f"${(premium / tiv * 100):.3f}"
-        else:
-            data["Rate"] = "N/A"
+        premium = float(re.sub(r"[^\d.]", "", data.get("Premium", "0")))
+        tiv = float(re.sub(r"[^\d.]", "", data.get("Total Insured Value", "0")))
+        data["Rate"] = f"${(premium / tiv * 100):.3f}" if tiv > 0 else "N/A"
     except:
         data["Rate"] = "N/A"
 
@@ -104,7 +109,7 @@ class SummaryPDF(FPDF):
             self.set_text_color(*KITCO_BLUE)
             self.cell(60, 6, f"{field}:", ln=False)
             self.set_text_color(0, 0, 0)
-            self.multi_cell(0, 6, f"{value}", align="L")
+            self.multi_cell(0, 6, sanitize_text(f"{value}"), align="L")
 
     def add_bullet_section(self, title, content):
         self.set_text_color(*KITCO_GREEN)
@@ -112,12 +117,17 @@ class SummaryPDF(FPDF):
         self.cell(0, 10, title, ln=True)
         self.set_text_color(0, 0, 0)
         self.set_font("Helvetica", size=8)
-        lines = [line.strip("•").strip("-").strip() for line in content.split("\n") if line.strip()]
-        for bullet in lines:
-            self.cell(5)
-            self.multi_cell(0, 5, f"• {bullet}", align="L")
+        for line in content.split("\n"):
+            for bullet in line.split(" - "):
+                if bullet.strip():
+                    self.cell(5)
+                    self.multi_cell(0, 5, f"• {sanitize_text(bullet.strip())}", align="L")
 
-# Generate summary PDF
+# Helper to clean unicode
+def sanitize_text(text):
+    return text.encode("latin1", "replace").decode("latin1")
+
+# Create and save PDF
 def generate_pdf_summary(data, filename):
     pdf = SummaryPDF()
     pdf.add_page()
@@ -139,7 +149,7 @@ def generate_pdf_summary(data, filename):
     pdf.add_bullet_section("Exclusions Summary", data.get("Exclusions Summary", "N/A"))
     pdf.output(filename, "F")
 
-# Merge PDFs
+# Merge summary + source PDF
 def merge_pdfs(summary_path, original_path, output_path):
     merger = PdfMerger()
     merger.append(summary_path)
@@ -150,7 +160,7 @@ def merge_pdfs(summary_path, original_path, output_path):
     merger.write(output_path)
     merger.close()
 
-# Streamlit App
+# Streamlit app
 st.set_page_config(page_title="Insurance PDF Extractor")
 st.title("📄 Insurance Document Extractor")
 
