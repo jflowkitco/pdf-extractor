@@ -84,7 +84,11 @@ def parse_output_to_dict(text_output):
     try:
         premium = float(re.sub(r"[^\d.]", "", data.get("Premium", "0")))
         tiv = float(re.sub(r"[^\d.]", "", data.get("Total Insured Value", "0")))
-        data["Rate"] = f"${(premium / tiv * 100):.3f}" if tiv > 0 else "N/A"
+        if premium > 0 and tiv > 0:
+            rate = premium / tiv * 100
+            data["Rate"] = f"${rate:.3f}"
+        else:
+            data["Rate"] = "N/A"
     except:
         data["Rate"] = "N/A"
 
