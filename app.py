@@ -9,6 +9,7 @@ from fpdf import FPDF
 import tempfile
 from PyPDF2 import PdfMerger
 import re
+import json
 
 # Load API key
 load_dotenv()
@@ -119,7 +120,7 @@ Exclusions Summary:
         messages=[{"role": "user", "content": prompt}],
         temperature=0
     )
-    return response.choices[0].message.content
+    return response.choices[0].message.content, prompt
 
 # Convert GPT output to dictionary
 def parse_output_to_dict(text_output):
@@ -230,7 +231,7 @@ if uploaded_file is not None:
     page_five_text = extract_page_five_text(temp_uploaded_path)
     tiv_text = extract_tiv_from_pages(temp_uploaded_path)
     st.success("Sending to GPT...")
-    fields_output = extract_fields_from_text(text, page_five_text, tiv_text)
+    fields_output, prompt = extract_fields_from_text(text, page_five_text, tiv_text)
     st.code(fields_output)
 
     data_dict = parse_output_to_dict(fields_output)
@@ -248,3 +249,15 @@ if uploaded_file is not None:
                     file_name="insurance_summary.pdf",
                     mime="application/pdf"
                 )
+
+    if st.button("💾 Save as Training Data Example"):
+        fine_tune_example = {
+            "messages": [
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": fields_output}
+            ]
+        }
+        with open("fine_tuning_examples.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(fine_tune_example) + "\n")
+        st.success("✅ Saved for fine-tuning.")
+
