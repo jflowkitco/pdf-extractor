@@ -37,13 +37,13 @@ def extract_fields_from_text(text, page_five_text):
 You are an insurance document analyst. Extract the following details from the document:
 
 Focus only on page 5 for:
-- Premium (look for line item labeled Premium: $...)
-- Fees (look for Policy Fee or similar)
-- Taxes (look for Surplus Lines Tax, State Tax, etc.)
-- Policy Number (look for number format typically 7 digits long)
+- Premium (look for "Premium: $..."), not TRIA
+- Fees (look for "Policy Fee" or similar)
+- Taxes (look for "Surplus Lines Tax", "State Tax")
+- Policy Number (typically a 6–9 digit number with no prefix or suffix)
 - Ignore anything labeled TRIA premium
 
-Then review the full document text for everything else:
+Then use the full document text to find:
 - Insured Name
 - Named Insured Type
 - Mailing Address
@@ -63,7 +63,8 @@ Then review the full document text for everything else:
 - Endorsements Summary
 - Exclusions Summary
 
-Return the results exactly like this:
+Return in this format:
+
 Insured Name: ...
 Named Insured Type: ...
 Mailing Address: ...
@@ -91,7 +92,7 @@ Exclusions Summary:
 
 --- PAGE 5 ---
 {page_five_text}
---- DOCUMENT ---
+--- DOCUMENT TEXT ---
 {text[:8000]}
 """
     response = client.chat.completions.create(
@@ -122,7 +123,7 @@ def parse_output_to_dict(text_output):
 
     return data
 
-# PDF layout
+# PDF Layout Class
 class SummaryPDF(FPDF):
     def header(self):
         if os.path.exists(KITCO_LOGO_PATH):
@@ -157,17 +158,16 @@ class SummaryPDF(FPDF):
                     self.cell(5)
                     self.multi_cell(0, 5, f"• {sanitize_text(bullet.strip())}", align="L")
 
-# Helper to clean unicode
+# Sanitize for PDF
 def sanitize_text(text):
     return text.encode("latin1", "replace").decode("latin1")
 
-# Create and save PDF
+# PDF Summary Generator
 def generate_pdf_summary(data, filename):
     pdf = SummaryPDF()
     pdf.add_page()
     pdf.add_data_section("Insured Details", [
-        "Insured Name", "Named Insured Type", "Mailing Address", "Property Address",
-        "Underwriting Contact Email"
+        "Insured Name", "Named Insured Type", "Mailing Address", "Property Address", "Underwriting Contact Email"
     ], data)
     pdf.add_data_section("Coverage Dates and Values", [
         "Effective Date", "Expiration Date", "Premium", "Rate", "Taxes", "Fees", "Total Insured Value"
@@ -183,7 +183,7 @@ def generate_pdf_summary(data, filename):
     pdf.add_bullet_section("Exclusions Summary", data.get("Exclusions Summary", "N/A"))
     pdf.output(filename, "F")
 
-# Merge summary + source PDF
+# Combine PDF
 def merge_pdfs(summary_path, original_path, output_path):
     merger = PdfMerger()
     merger.append(summary_path)
@@ -194,7 +194,7 @@ def merge_pdfs(summary_path, original_path, output_path):
     merger.write(output_path)
     merger.close()
 
-# Streamlit app
+# Streamlit App
 st.set_page_config(page_title="Insurance PDF Extractor")
 st.title("📄 Insurance Document Extractor")
 
@@ -208,6 +208,7 @@ if uploaded_file is not None:
 
     text = extract_text_from_pdf(temp_uploaded_path)
     page_five_text = extract_page_five_text(temp_uploaded_path)
+
     st.success("Sending to GPT...")
     fields_output = extract_fields_from_text(text, page_five_text)
     st.code(fields_output)
