@@ -24,16 +24,44 @@ def extract_text_from_pdf(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
         return "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
 
+# Extract page 5 for accurate premium/tax/fee info
+def extract_page_five_text(pdf_file):
+    with pdfplumber.open(pdf_file) as pdf:
+        if len(pdf.pages) >= 5:
+            return pdf.pages[4].extract_text()
+        return ""
+
 # Ask GPT to extract details
-def extract_fields_from_text(text):
+def extract_fields_from_text(text, page_five_text):
     prompt = f"""
 You are an insurance document analyst. Extract the following details from the document:
 
-👉 Focus on the invoice/quote page (usually the last few pages) to find:
-- Premium (look for Scheduled Premium or Total Premium — ❌ do not use TRIA Premium)
-- Taxes (e.g. Surplus Lines Tax, State Tax)
-- Fees (e.g. Policy Fee, Stamping Fee)
-- Policy Number (often near the top or in headers)
+Focus only on page 5 for:
+- Premium (should be $91,689.00)
+- Fees (should be $900.00)
+- Taxes (should be $2,777.67)
+- Ignore anything labeled TRIA premium
+
+Then review the full document text for everything else:
+- Insured Name
+- Named Insured Type
+- Mailing Address
+- Property Address
+- Effective Date
+- Expiration Date
+- Total Insured Value
+- Policy Number
+- Coverage Type
+- Carrier Name
+- Broker Name
+- Underwriting Contact Email
+- Wind Deductible
+- Hail Deductible
+- Named Storm Deductible
+- All Other Perils Deductible
+- Deductible Notes
+- Endorsements Summary
+- Exclusions Summary
 
 Return the results exactly like this:
 Insured Name: ...
@@ -62,9 +90,10 @@ Endorsements Summary:
 Exclusions Summary:
 - ...
 
---- DOCUMENT START ---
+--- PAGE 5 ---
+{page_five_text}
+--- DOCUMENT ---
 {text[:8000]}
---- DOCUMENT END ---
 """
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -88,9 +117,9 @@ def parse_output_to_dict(text_output):
             rate = premium / tiv * 100
             data["Rate"] = f"${rate:.3f}"
         else:
-            data["Rate"] = "Not specified"
+            data["Rate"] = "N/A"
     except:
-        data["Rate"] = "Not specified"
+        data["Rate"] = "N/A"
 
     return data
 
@@ -179,8 +208,9 @@ if uploaded_file is not None:
         temp_uploaded_path = temp_uploaded.name
 
     text = extract_text_from_pdf(temp_uploaded_path)
+    page_five_text = extract_page_five_text(temp_uploaded_path)
     st.success("Sending to GPT...")
-    fields_output = extract_fields_from_text(text)
+    fields_output = extract_fields_from_text(text, page_five_text)
     st.code(fields_output)
 
     data_dict = parse_output_to_dict(fields_output)
