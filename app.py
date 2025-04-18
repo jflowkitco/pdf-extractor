@@ -75,15 +75,20 @@ def parse_output_to_dict(text_output):
             key, value = line.split(":", 1)
             data[key.strip()] = value.strip()
 
-    try:
-        premium = float(re.sub(r"[^\d.]", "", data.get("Premium", "0")))
-        tiv = float(re.sub(r"[^\d.]", "", data.get("Total Insured Value", "0")))
-        if tiv > 0:
-            rate = (premium / tiv) * 100
-            data["Rate"] = f"${rate:.3f}"
-        else:
-            data["Rate"] = "N/A"
-    except:
+    def clean_currency(val):
+        if not val or val == "N/A":
+            return 0.0
+        match = re.search(r"[\$]?([\d,]+\.\d{2})", val)
+        if match:
+            return float(match.group(1).replace(",", ""))
+        return 0.0
+
+    premium = clean_currency(data.get("Premium", ""))
+    tiv = clean_currency(data.get("Total Insured Value", ""))
+    if premium > 0 and tiv > 0:
+        rate = premium / tiv * 100
+        data["Rate"] = f"${rate:.3f}"
+    else:
         data["Rate"] = "N/A"
 
     return data
