@@ -4,6 +4,7 @@ import pandas as pd
 import os
 from dotenv import load_dotenv
 import openai
+from openai import OpenAI
 from fpdf import FPDF
 import tempfile
 from PyPDF2 import PdfMerger
@@ -11,7 +12,7 @@ import re
 
 # Load API key
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 KITCO_BLUE = (33, 135, 132)
 KITCO_GREEN = (61, 153, 93)
@@ -65,7 +66,7 @@ Exclusions Summary:
 {text[:8000]}
 --- DOCUMENT END ---
 """
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
         temperature=0
