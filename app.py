@@ -15,6 +15,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 KITCO_BLUE = (33, 135, 132)
 KITCO_GREEN = (61, 153, 93)
+KITCO_GOLD = (191, 127, 43)
 KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"
 
 def extract_text_from_pdf(pdf_file):
@@ -24,34 +25,33 @@ def extract_text_from_pdf(pdf_file):
 def extract_fields_from_text(text):
     prompt = f"""
 You are a commercial insurance expert reviewing a property insurance quote.
-Extract the following fields. Look in invoice tables, footnotes, or coverage details. Return "N/A" if not found.
+Carefully extract the following fields. Return "N/A" if unclear. Look in invoice tables or summary lines for:
+- Premium (e.g. "Premium Due", "Total Premium", "Annual Premium")
+- Taxes (e.g. "Surplus Lines Tax", "Taxes and Fees")
+- Fees (e.g. "Policy Fee", "Stamping Fee", etc.)
+- Policy Number (can appear anywhere, often near Named Insured or at top)
 
-Insured Name
-Named Insured Type
-Mailing Address
-Property Address
-Effective Date
-Expiration Date
-Premium
-Taxes
-Fees
-Total Insured Value
-Policy Number
-Coverage Type
-Carrier Name
-Broker Name
-Underwriting Contact Email
-Wind Deductible
-Hail Deductible
-Named Storm Deductible
-All Other Perils Deductible
-Deductible Notes
-Endorsements Summary (bullet list)
-Exclusions Summary (bullet list)
-
-Return in this format:
+Return each value on its own line:
 Insured Name: ...
-...
+Named Insured Type: ...
+Mailing Address: ...
+Property Address: ...
+Effective Date: ...
+Expiration Date: ...
+Premium: ...
+Taxes: ...
+Fees: ...
+Total Insured Value: ...
+Policy Number: ...
+Coverage Type: ...
+Carrier Name: ...
+Broker Name: ...
+Underwriting Contact Email: ...
+Wind Deductible: ...
+Hail Deductible: ...
+Named Storm Deductible: ...
+All Other Perils Deductible: ...
+Deductible Notes: ...
 Endorsements Summary:
 - ...
 Exclusions Summary:
@@ -78,7 +78,11 @@ def parse_output_to_dict(text_output):
     try:
         premium = float(re.sub(r"[^\d.]", "", data.get("Premium", "0")))
         tiv = float(re.sub(r"[^\d.]", "", data.get("Total Insured Value", "0")))
-        data["Rate"] = f"${(premium / tiv * 100):.3f}" if tiv > 0 else "N/A"
+        if tiv > 0:
+            rate = (premium / tiv) * 100
+            data["Rate"] = f"${rate:.3f}"
+        else:
+            data["Rate"] = "N/A"
     except:
         data["Rate"] = "N/A"
 
@@ -104,7 +108,7 @@ class SummaryPDF(FPDF):
             self.set_text_color(*KITCO_BLUE)
             self.cell(60, 6, f"{field}:", ln=False)
             self.set_text_color(0, 0, 0)
-            self.multi_cell(0, 6, f"{value}", align="L")
+            self.multi_cell(0, 6, value, align="L")
 
     def add_bullet_section(self, title, content):
         self.set_text_color(*KITCO_GREEN)
@@ -114,9 +118,10 @@ class SummaryPDF(FPDF):
         self.set_font("Helvetica", size=8)
         for line in content.split("\n"):
             for bullet in line.split(" - "):
-                if bullet.strip():
+                bullet = bullet.strip(" -•\u2022").strip()
+                if bullet:
                     self.cell(5)
-                    self.multi_cell(0, 5, f"• {bullet.strip()}", align="L")
+                    self.multi_cell(0, 5, f"• {bullet}", align="L")
 
 def generate_pdf_summary(data, filename):
     pdf = SummaryPDF()
@@ -126,7 +131,8 @@ def generate_pdf_summary(data, filename):
         "Underwriting Contact Email"
     ], data)
     pdf.add_data_section("Coverage Dates and Values", [
-        "Effective Date", "Expiration Date", "Premium", "Taxes", "Fees", "Total Insured Value", "Rate"
+        "Effective Date", "Expiration Date", "Premium", "Taxes", "Fees",
+        "Total Insured Value", "Rate"
     ], data)
     pdf.add_data_section("Policy Info", [
         "Policy Number", "Coverage Type", "Carrier Name", "Broker Name"
@@ -149,7 +155,6 @@ def merge_pdfs(summary_path, original_path, output_path):
     merger.write(output_path)
     merger.close()
 
-# Streamlit UI
 st.set_page_config(page_title="Insurance PDF Extractor")
 st.title("📄 Insurance Document Extractor")
 
