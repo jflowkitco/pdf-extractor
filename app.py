@@ -3,7 +3,7 @@ import pdfplumber
 import pandas as pd
 import os
 from dotenv import load_dotenv
-from openai import OpenAI
+import openai
 from fpdf import FPDF
 import tempfile
 from PyPDF2 import PdfMerger
@@ -11,11 +11,10 @@ import re
 
 # Load API key
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 KITCO_BLUE = (33, 135, 132)
 KITCO_GREEN = (61, 153, 93)
-KITCO_GOLD = (191, 127, 43)
 KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"
 
 # Extract all text from PDF
@@ -28,7 +27,7 @@ def extract_fields_from_text(text):
     prompt = f"""
 You are an insurance document analyst. Extract the following details from the document:
 
-Focus on the invoice section for:
+Focus especially on the invoice section for:
 - Premium (e.g. "Total Premium", "Premium Due")
 - Taxes (e.g. "Surplus Lines Tax", "State Tax")
 - Fees (e.g. "Policy Fee", "Stamping Fee")
@@ -64,7 +63,7 @@ Exclusions Summary:
 {text[:8000]}
 --- DOCUMENT END ---
 """
-    response = client.chat.completions.create(
+    response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
         temperature=0
@@ -80,8 +79,8 @@ def parse_output_to_dict(text_output):
             data[key.strip()] = value.strip()
 
     try:
-        premium = float(re.sub(r"[^\d.]", "", data.get("Premium", "0")))
-        tiv = float(re.sub(r"[^\d.]", "", data.get("Total Insured Value", "0")))
+        premium = float(re.sub(r"[^\d.]", "", data.get("Premium", "")) or 0)
+        tiv = float(re.sub(r"[^\d.]", "", data.get("Total Insured Value", "")) or 0)
         data["Rate"] = f"${(premium / tiv * 100):.3f}" if tiv > 0 else "N/A"
     except:
         data["Rate"] = "N/A"
