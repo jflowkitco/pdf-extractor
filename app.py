@@ -24,7 +24,7 @@ def extract_text_from_pdf(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
         return "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
 
-# Extract page 5 for accurate premium/tax/fee info
+# Extract page 5 for accurate premium/tax/fee/policy number info
 def extract_page_five_text(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
         if len(pdf.pages) >= 5:
@@ -37,9 +37,10 @@ def extract_fields_from_text(text, page_five_text):
 You are an insurance document analyst. Extract the following details from the document:
 
 Focus only on page 5 for:
-- Premium (should be $91,689.00)
-- Fees (should be $900.00)
-- Taxes (should be $2,777.67)
+- Premium (look for line item labeled Premium: $...)
+- Fees (look for Policy Fee or similar)
+- Taxes (look for Surplus Lines Tax, State Tax, etc.)
+- Policy Number (look for number format typically 7 digits long)
 - Ignore anything labeled TRIA premium
 
 Then review the full document text for everything else:
@@ -50,7 +51,6 @@ Then review the full document text for everything else:
 - Effective Date
 - Expiration Date
 - Total Insured Value
-- Policy Number
 - Coverage Type
 - Carrier Name
 - Broker Name
