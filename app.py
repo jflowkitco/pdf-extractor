@@ -30,7 +30,7 @@ def extract_fields_from_text(text):
 You are an insurance document analyst. Extract the following details from the document:
 
 Focus on the invoice section for:
-- Premium (look for total premium, schedule premium, total including taxes and fees)
+- Premium (DO NOT use TRIA premium, look for the main scheduled or total premium)
 - Taxes (e.g. Surplus Lines Tax, State Tax)
 - Fees (e.g. Policy Fee, Stamping Fee)
 - Policy Number (near insured name or in headers)
