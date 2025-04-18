@@ -15,6 +15,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 KITCO_BLUE = (33, 135, 132)
 KITCO_GREEN = (61, 153, 93)
+KITCO_GOLD = (191, 127, 43)
 KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"
 
 # Extract all text from PDF
@@ -27,7 +28,7 @@ def extract_fields_from_text(text):
     prompt = f"""
 You are an insurance document analyst. Extract the following details from the document:
 
-Focus especially on the invoice section for:
+Focus on the invoice section for:
 - Premium (e.g. "Total Premium", "Premium Due")
 - Taxes (e.g. "Surplus Lines Tax", "State Tax")
 - Fees (e.g. "Policy Fee", "Stamping Fee")
@@ -54,6 +55,7 @@ Hail Deductible: ...
 Named Storm Deductible: ...
 All Other Perils Deductible: ...
 Deductible Notes: ...
+Rate: ...
 Endorsements Summary:
 - ...
 Exclusions Summary:
@@ -79,8 +81,8 @@ def parse_output_to_dict(text_output):
             data[key.strip()] = value.strip()
 
     try:
-        premium = float(re.sub(r"[^\d.]", "", data.get("Premium", "")) or 0)
-        tiv = float(re.sub(r"[^\d.]", "", data.get("Total Insured Value", "")) or 0)
+        premium = float(re.sub(r"[^\d.]", "", data.get("Premium", "0")))
+        tiv = float(re.sub(r"[^\d.]", "", data.get("Total Insured Value", "0")))
         data["Rate"] = f"${(premium / tiv * 100):.3f}" if tiv > 0 else "N/A"
     except:
         data["Rate"] = "N/A"
