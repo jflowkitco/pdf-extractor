@@ -29,11 +29,11 @@ def extract_fields_from_text(text):
     prompt = f"""
 You are an insurance document analyst. Extract the following details from the document:
 
-Focus on the invoice section for:
-- Premium (DO NOT use TRIA premium, look for the main scheduled or total premium)
+👉 Focus on the invoice/quote page (usually the last few pages) to find:
+- Premium (look for Scheduled Premium or Total Premium — ❌ do not use TRIA Premium)
 - Taxes (e.g. Surplus Lines Tax, State Tax)
 - Fees (e.g. Policy Fee, Stamping Fee)
-- Policy Number (near insured name or in headers)
+- Policy Number (often near the top or in headers)
 
 Return the results exactly like this:
 Insured Name: ...
@@ -88,9 +88,9 @@ def parse_output_to_dict(text_output):
             rate = premium / tiv * 100
             data["Rate"] = f"${rate:.3f}"
         else:
-            data["Rate"] = "N/A"
+            data["Rate"] = "Not specified"
     except:
-        data["Rate"] = "N/A"
+        data["Rate"] = "Not specified"
 
     return data
 
