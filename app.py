@@ -141,7 +141,7 @@ def parse_output_to_dict(text_output):
             data["Rate"] = f"${rate:.3f}"
         else:
             data["Rate"] = "N/A"
-    except:
+    except Exception:
         data["Rate"] = "N/A"
 
     return data
