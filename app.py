@@ -15,21 +15,24 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 KITCO_BLUE = (33, 135, 132)
 KITCO_GREEN = (61, 153, 93)
+KITCO_GOLD = (191, 127, 43)
 KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"
 
+# Extract all text from PDF
 def extract_text_from_pdf(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
         return "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
 
+# Ask GPT to extract details
 def extract_fields_from_text(text):
     prompt = f"""
 You are an insurance document analyst. Extract the following details from the document:
 
-Focus on the invoice and coverage sections for:
-- Premium (e.g. "Total Premium", "Premium Due", "Deposit Premium")
+Focus on the invoice section for:
+- Premium (e.g. "Total Premium", "Premium Due")
 - Taxes (e.g. "Surplus Lines Tax", "State Tax")
 - Fees (e.g. "Policy Fee", "Stamping Fee")
-- Policy Number (often in top sections, headers, or near named insured)
+- Policy Number (near insured name or in headers)
 
 Return the results exactly like this:
 Insured Name: ...
@@ -58,7 +61,7 @@ Exclusions Summary:
 - ...
 
 --- DOCUMENT START ---
-{text[:10000]}
+{text[:8000]}
 --- DOCUMENT END ---
 """
     response = client.chat.completions.create(
@@ -68,6 +71,7 @@ Exclusions Summary:
     )
     return response.choices[0].message.content
 
+# Convert GPT output to dictionary
 def parse_output_to_dict(text_output):
     data = {}
     for line in text_output.strip().split("\n"):
@@ -75,16 +79,16 @@ def parse_output_to_dict(text_output):
             key, value = line.split(":", 1)
             data[key.strip()] = value.strip()
 
-    # Fallback rate logic
     try:
-        premium = float(re.sub(r"[^\d.]", "", data.get("Premium", "")))
-        tiv = float(re.sub(r"[^\d.]", "", data.get("Total Insured Value", "")))
-        data["Rate"] = f"${(premium / tiv * 100):.3f}" if premium > 0 and tiv > 0 else "N/A"
+        premium = float(re.sub(r"[^\d.]", "", data.get("Premium", "0")))
+        tiv = float(re.sub(r"[^\d.]", "", data.get("Total Insured Value", "0")))
+        data["Rate"] = f"${(premium / tiv * 100):.3f}" if tiv > 0 else "N/A"
     except:
         data["Rate"] = "N/A"
 
     return data
 
+# PDF layout
 class SummaryPDF(FPDF):
     def header(self):
         if os.path.exists(KITCO_LOGO_PATH):
@@ -113,18 +117,17 @@ class SummaryPDF(FPDF):
         self.cell(0, 10, title, ln=True)
         self.set_text_color(0, 0, 0)
         self.set_font("Helvetica", size=8)
-        if content.strip() == "N/A":
-            self.multi_cell(0, 5, "N/A")
-            return
-        for bullet in content.split("- "):
-            clean = bullet.strip()
-            if clean:
-                self.cell(5)
-                self.multi_cell(0, 5, f"• {sanitize_text(clean)}", align="L")
+        for line in content.split("\n"):
+            for bullet in line.split(" - "):
+                if bullet.strip():
+                    self.cell(5)
+                    self.multi_cell(0, 5, f"• {sanitize_text(bullet.strip())}", align="L")
 
+# Helper to clean unicode
 def sanitize_text(text):
     return text.encode("latin1", "replace").decode("latin1")
 
+# Create and save PDF
 def generate_pdf_summary(data, filename):
     pdf = SummaryPDF()
     pdf.add_page()
@@ -146,6 +149,7 @@ def generate_pdf_summary(data, filename):
     pdf.add_bullet_section("Exclusions Summary", data.get("Exclusions Summary", "N/A"))
     pdf.output(filename, "F")
 
+# Merge summary + source PDF
 def merge_pdfs(summary_path, original_path, output_path):
     merger = PdfMerger()
     merger.append(summary_path)
@@ -156,7 +160,7 @@ def merge_pdfs(summary_path, original_path, output_path):
     merger.write(output_path)
     merger.close()
 
-# Streamlit UI
+# Streamlit app
 st.set_page_config(page_title="Insurance PDF Extractor")
 st.title("📄 Insurance Document Extractor")
 
