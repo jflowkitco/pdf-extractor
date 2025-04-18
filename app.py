@@ -32,12 +32,12 @@ def extract_page_five_text(pdf_file):
             return pdf.pages[4].extract_text()
         return ""
 
-# Extract TIV from pages 4-10 (index 3 to 9)
-def extract_tiv_from_pages(pdf_file):
+# Extract TIV from all pages
+def extract_tiv_from_all_pages(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
         text = ""
-        for i in range(3, min(10, len(pdf.pages))):
-            page_text = pdf.pages[i].extract_text()
+        for page in pdf.pages:
+            page_text = page.extract_text()
             if page_text:
                 text += page_text + "\n"
         return text
@@ -54,15 +54,15 @@ Focus only on page 5 for:
 - Policy Number (look for number format typically 7+ digits long)
 - Ignore anything labeled TRIA premium
 
-Focus on pages 4-10 for:
-- Add up the limits for the following components, if present, to calculate the Total Insured Value (TIV):
+Focus on the entire document for:
+- Add up the limits for the following components to calculate Total Insured Value (TIV):
   - Building coverage
   - Business Personal Property
   - Business Income / Rental Value
   - Other Structures
-  - Any other coverage with a dollar amount that contributes to property protection
+  - Any other property-related coverage with a dollar limit
 
-Then review the full document text for everything else:
+Then extract:
 - Insured Name
 - Named Insured Type
 - Mailing Address
@@ -232,7 +232,7 @@ if uploaded_file is not None:
 
     text = extract_text_from_pdf(temp_uploaded_path)
     page_five_text = extract_page_five_text(temp_uploaded_path)
-    tiv_text = extract_tiv_from_pages(temp_uploaded_path)
+    tiv_text = extract_tiv_from_all_pages(temp_uploaded_path)
     st.success("Sending to GPT...")
     fields_output, prompt = extract_fields_from_text(text, page_five_text, tiv_text)
     st.code(fields_output)
