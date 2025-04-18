@@ -15,27 +15,26 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 KITCO_BLUE = (33, 135, 132)
 KITCO_GREEN = (61, 153, 93)
+KITCO_GOLD = (191, 127, 43)
 KITCO_LOGO_PATH = "KITCO_HORIZ_FULL.png"
 
+# Extract all text from PDF
 def extract_text_from_pdf(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
         return "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
 
+# Ask GPT to extract details
 def extract_fields_from_text(text):
     prompt = f"""
-You are an insurance document analyst. Extract the following from the document, with special attention to invoice-style sections and policy details.
+You are an insurance document analyst. Extract the following details from the document:
 
-Be sure to extract:
-- Premium (look for: "Total Premium", "Premium Due", or numeric values next to "Premium")
-- Taxes (e.g., "Surplus Lines Tax", "State Tax")
-- Fees (e.g., "Policy Fee", "Stamping Fee")
-- Policy Number (near headers or insured info)
+Focus on the invoice section for:
+- Premium (e.g. "Total Premium", "Premium Due")
+- Taxes (e.g. "Surplus Lines Tax", "State Tax")
+- Fees (e.g. "Policy Fee", "Stamping Fee")
+- Policy Number (near insured name or in headers)
 
-Then calculate:
-- Rate = Premium ÷ Total Insured Value × 100 (rounded to 3 decimal places)
-
-Return the result in this exact format:
-
+Return the results exactly like this:
 Insured Name: ...
 Named Insured Type: ...
 Mailing Address: ...
@@ -56,7 +55,6 @@ Hail Deductible: ...
 Named Storm Deductible: ...
 All Other Perils Deductible: ...
 Deductible Notes: ...
-Rate: ...
 Endorsements Summary:
 - ...
 Exclusions Summary:
@@ -73,6 +71,7 @@ Exclusions Summary:
     )
     return response.choices[0].message.content
 
+# Convert GPT output to dictionary
 def parse_output_to_dict(text_output):
     data = {}
     for line in text_output.strip().split("\n"):
@@ -81,18 +80,15 @@ def parse_output_to_dict(text_output):
             data[key.strip()] = value.strip()
 
     try:
-        premium_raw = re.sub(r"[^\d.]", "", data.get("Premium", "0"))
-        tiv_raw = re.sub(r"[^\d.]", "", data.get("Total Insured Value", "0"))
-
-        premium = float(premium_raw) if premium_raw else 0
-        tiv = float(tiv_raw) if tiv_raw else 0
-
-        data["Rate"] = f"${(premium / tiv * 100):.3f}" if premium > 0 and tiv > 0 else "N/A"
-    except Exception:
+        premium = float(re.sub(r"[^\d.]", "", data.get("Premium", "0")))
+        tiv = float(re.sub(r"[^\d.]", "", data.get("Total Insured Value", "0")))
+        data["Rate"] = f"${(premium / tiv * 100):.3f}" if tiv > 0 else "N/A"
+    except:
         data["Rate"] = "N/A"
 
     return data
 
+# PDF layout
 class SummaryPDF(FPDF):
     def header(self):
         if os.path.exists(KITCO_LOGO_PATH):
@@ -113,7 +109,7 @@ class SummaryPDF(FPDF):
             self.set_text_color(*KITCO_BLUE)
             self.cell(60, 6, f"{field}:", ln=False)
             self.set_text_color(0, 0, 0)
-            self.multi_cell(0, 6, sanitize_text(value), align="L")
+            self.multi_cell(0, 6, sanitize_text(f"{value}"), align="L")
 
     def add_bullet_section(self, title, content):
         self.set_text_color(*KITCO_GREEN)
@@ -122,14 +118,16 @@ class SummaryPDF(FPDF):
         self.set_text_color(0, 0, 0)
         self.set_font("Helvetica", size=8)
         for line in content.split("\n"):
-            if line.strip().startswith("-"):
-                bullet = line.strip().lstrip("-").strip()
-                self.cell(5)
-                self.multi_cell(0, 5, f"• {sanitize_text(bullet)}", align="L")
+            for bullet in line.split(" - "):
+                if bullet.strip():
+                    self.cell(5)
+                    self.multi_cell(0, 5, f"• {sanitize_text(bullet.strip())}", align="L")
 
+# Helper to clean unicode
 def sanitize_text(text):
     return text.encode("latin1", "replace").decode("latin1")
 
+# Create and save PDF
 def generate_pdf_summary(data, filename):
     pdf = SummaryPDF()
     pdf.add_page()
@@ -151,6 +149,7 @@ def generate_pdf_summary(data, filename):
     pdf.add_bullet_section("Exclusions Summary", data.get("Exclusions Summary", "N/A"))
     pdf.output(filename, "F")
 
+# Merge summary + source PDF
 def merge_pdfs(summary_path, original_path, output_path):
     merger = PdfMerger()
     merger.append(summary_path)
@@ -161,7 +160,7 @@ def merge_pdfs(summary_path, original_path, output_path):
     merger.write(output_path)
     merger.close()
 
-# Streamlit App
+# Streamlit app
 st.set_page_config(page_title="Insurance PDF Extractor")
 st.title("📄 Insurance Document Extractor")
 
